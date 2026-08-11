@@ -1,0 +1,40 @@
+{
+  "name": "t3code-rtl",
+  "version": "0.0.0",
+  "description": "Persian and Arabic RTL support for T3 Code.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "t3code-rtl": "dist/cli.js" },
+  "files": [
+    "dist",
+    "rtl.js",
+    "fonts",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/farhadeidi/t3code-rtl.git"
+  },
+  "bugs": {
+    "url": "https://github.com/farhadeidi/t3code-rtl/issues"
+  },
+  "homepage": "https://github.com/farhadeidi/t3code-rtl#readme",
+  "scripts": {
+    "build": "tsup src/cli.ts --format esm --platform node --target node20",
+    "check": "tsc --noEmit",
+    "dev": "tsx src/cli.ts",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "tsup": "^8.5.1",
+    "typescript": "^7.0.2"
+  }
+}
