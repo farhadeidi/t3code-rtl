@@ -1,37 +1,469 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, unlinkSync, readdirSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import * as p from "@clack/prompts";
 
+type UpdateMode = "managed" | "native";
+type Config = { updateMode?: UpdateMode; managedByPatch?: boolean };
+
 const here = dirname(fileURLToPath(import.meta.url));
 const root = dirname(here);
-const begin = "<!-- t3code-rtl:begin -->", end = "<!-- t3code-rtl:end -->";
-const rel = "apps/server/dist/client/index.html";
-const label = "io.github.farhadeidi.t3code-rtl-disable-auto-update";
-const appDirs = () => process.env.T3CODE_APP_DIRS?.split("\n").filter(Boolean) ?? (process.platform === "darwin" ? requireGlob("/Applications/T3 Code*.app") : ["/opt/t3code-bin", "/opt/t3code-nightly-bin"]);
-function requireGlob(pattern: string) { const { dir, base } = { dir: dirname(pattern), base: basename(pattern).replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace("\\*", ".*") }; try { return readdirSync(dir).filter((x) => new RegExp(`^${base}$`).test(x)).map((x)=>join(dir,x)).sort(); } catch { return []; } }
-const configPath = () => process.platform === "darwin" ? join(process.env.HOME!, "Library", "Application Support", "t3code-rtl", "config.json") : join(process.env.XDG_CONFIG_HOME ?? join(process.env.HOME!, ".config"), "t3code-rtl", "config.json");
-function config(): Record<string, unknown> { try { return JSON.parse(readFileSync(configPath(), "utf8")); } catch { return {}; } }
-function save(value: Record<string, unknown>) { mkdirSync(dirname(configPath()), { recursive: true }); writeFileSync(configPath(), JSON.stringify(value, null, 2) + "\n"); }
-function resource(app:string) { for (const middle of ["resources", "Contents/Resources"]) { const r=join(app,middle); if (existsSync(join(r,"app.asar")) || existsSync(join(r,"app.asar.unpacked",rel))) return r; } }
-function support(name:string) { for (const path of [join(root,name), join(root,"fonts",name)]) if (existsSync(path)) return path; throw new Error(`${name} is missing`); }
-function payload() { let js=readFileSync(support("rtl.js"),"utf8"); const font=readFileSync(support("AradNLVF.woff2")).toString("base64"); return js.replace("__T3CODE_ARAD_FONT__",`data:font/woff2;base64,${font}`); }
-function inject(html:string, js:string) { const old=new RegExp(`[ \\t]*${begin.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}[\\s\\S]*?${end.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}\\n?`,"g"); const clean=html.replace(old,""); if (!clean.includes("</body>")) throw Error("index.html has no </body>"); return clean.replace("</body>",`${begin}\n<script>\n${js}</script>\n${end}\n  </body>`); }
-function entry(header:any) { let node=header; for (const part of rel.split("/")) { node=node?.files?.[part]; } return node; }
-function integrity(data:Buffer) { const blockSize=4*1024*1024, hash=(x:Buffer)=>createHash("sha256").update(x).digest("hex"); const blocks=[]; for(let i=0;i<data.length;i+=blockSize) blocks.push(hash(data.subarray(i,i+blockSize))); return {algorithm:"SHA256",hash:hash(data),blockSize,blocks}; }
-function asarIntegrityEnforced(app:string): boolean | undefined { const sentinel=Buffer.from("dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX"); const framework=join(app,"Contents","Frameworks","Electron Framework.framework","Versions"); const candidates=existsSync(framework) ? readdirSync(framework).map((v)=>join(framework,v,"Electron Framework")) : []; for(const file of candidates) { try { const data=readFileSync(file), at=data.indexOf(sentinel); if(at>=0) return data[at+sentinel.length+2+4]===0x31; } catch {} } return undefined; }
-function patchAsar(asar:string, unpacked:string, js:string) { const raw=readFileSync(asar), jsonLen=raw.readUInt32LE(12), header=JSON.parse(raw.subarray(16,16+jsonLen).toString()); const e=entry(header); if(!e) throw Error("client index was not found in app.asar"); const target=join(unpacked,rel); const html=e.unpacked && existsSync(target) ? readFileSync(target,"utf8") : raw.subarray(8+raw.readUInt32LE(4)+Number(e.offset),8+raw.readUInt32LE(4)+Number(e.offset)+Number(e.size)).toString(); const patched=Buffer.from(inject(html,js)); mkdirSync(dirname(target),{recursive:true}); writeFileSync(target,patched); chmodSync(target,0o644); delete e.offset; e.size=patched.length; e.unpacked=true; e.integrity=integrity(patched); const encoded=Buffer.from(JSON.stringify(header)); if(encoded.length>jsonLen) throw Error("patched ASAR header would grow"); encoded.copy(raw,16); raw.fill(0x20,16+encoded.length,16+jsonLen); writeFileSync(asar,raw); }
-function patch() { const js=payload(); let count=0; for(const app of appDirs()) { const r=resource(app); if(!r) continue; const plain=join(r,"app.asar.unpacked",rel); try { if(existsSync(plain)) writeFileSync(plain,inject(readFileSync(plain,"utf8"),js)); else { const enforced=asarIntegrityEnforced(app); if(enforced!==false && !process.env.T3CODE_RTL_FORCE) throw Error(`ASAR integrity validation is ${enforced ? "enabled" : "unknown"}; refusing to patch`); patchAsar(join(r,"app.asar"),join(r,"app.asar.unpacked"),js); } count++; p.log.success(`Patched ${basename(app)}`); } catch(e) { p.log.error(`${basename(app)}: ${(e as Error).message}`); } } if(!count) throw Error("No T3 Code installation was patched."); }
-function agent() { return join(process.env.HOME!,"Library","LaunchAgents",`${label}.plist`); }
-function launch(args:string[], quiet=false) { return spawnSync("launchctl",args,{stdio:quiet?"ignore":"inherit"}).status===0; }
-function setMode(mode:"managed"|"native") { const c=config(); if(process.platform!=="darwin") { save({...c,updateMode:"native"}); return; } launch(["bootout",`gui/${process.getuid?.()}/${label}`],true); if(mode==="managed") { mkdirSync(dirname(agent()),{recursive:true}); writeFileSync(agent(),`<?xml version="1.0"?><plist version="1.0"><dict><key>Label</key><string>${label}</string><key>ProgramArguments</key><array><string>/bin/launchctl</string><string>setenv</string><string>T3CODE_DISABLE_AUTO_UPDATE</string><string>true</string></array><key>RunAtLoad</key><true/></dict></plist>`); launch(["bootstrap",`gui/${process.getuid?.()}`,agent()]); launch(["setenv","T3CODE_DISABLE_AUTO_UPDATE","true"]); save({...c,updateMode:mode,managedByPatch:true}); } else { try{unlinkSync(agent());}catch{} if(c.managedByPatch) launch(["unsetenv","T3CODE_DISABLE_AUTO_UPDATE"],true); save({...c,updateMode:mode,managedByPatch:false}); } }
-async function approve(message:string) { const answer=await p.confirm({message}); if(p.isCancel(answer) || !answer) { p.cancel("No changes were made."); return false; } return true; }
-async function setup() { p.intro("T3 Code RTL Patch"); const found=appDirs().filter(existsSync); if(!found.length) { p.outro("T3 Code was not found."); return; } p.log.success(`Found ${found.map((path) => basename(path)).join(", ")}`); const mode = process.platform === "darwin" ? await p.select({message:"How should updates work?",options:[{value:"managed",label:"Homebrew + automatic re-patch",hint:"recommended"},{value:"native",label:"Keep T3 Code automatic updates",hint:"patch manually afterward"}]}) : "native"; if(p.isCancel(mode)) return p.cancel("Cancelled."); if(!await approve(`This will configure ${mode} updates and modify ${found.length} T3 Code app bundle(s). Continue?`)) return; setMode(mode as "managed"|"native"); patch(); p.outro("Ready."); }
-function status(){const apps=appDirs().filter(existsSync); console.log(`T3 Code: ${apps.length?apps.join(", "):"not found"}`); console.log(`Update mode: ${config().updateMode??"not configured"}`);}
-async function update(){ if(process.platform!=="darwin") throw Error("Update T3 Code through your package manager, then run: t3code-rtl patch"); if(!await approve("This will update T3 Code with Homebrew and modify its app bundle. Continue?")) return; execFileSync("brew",["upgrade","--cask","--greedy","t3-code"],{stdio:"inherit"}); patch(); }
-async function interactive(){ if(!config().updateMode) return setup(); p.intro("T3 Code RTL Patch"); const a=await p.select({message:"What do you want to do?",options:[{value:"patch",label:"Apply patch now"},{value:"status",label:"Check status"},{value:"setup",label:"Change update strategy"},...(process.platform==="darwin"?[{value:"update",label:"Update T3 Code now"}]:[])]}); if(p.isCancel(a)) return p.cancel("Cancelled."); if(a==="patch") { if(await approve("This will modify the T3 Code app bundle. Continue?")) patch(); } else if(a==="status") status(); else if(a==="setup") await setup(); else await update(); p.outro("Done."); }
-async function main(){ const command=process.argv[2]; try { if(!command) await interactive(); else if(command==="setup") await setup(); else if(command==="patch") { if(await approve("This will modify the T3 Code app bundle. Continue?")) patch(); } else if(command==="status"||command==="doctor") status(); else if(command==="update") await update(); else throw Error("Usage: t3code-rtl [setup|patch|status|doctor|update]"); } catch(e){ p.log.error((e as Error).message); process.exitCode=1; } }
+const BEGIN = "<!-- t3code-rtl:begin -->";
+const END = "<!-- t3code-rtl:end -->";
+const CLIENT_INDEX = "apps/server/dist/client/index.html";
+const AGENT_LABEL = "io.github.farhadeidi.t3code-rtl-disable-auto-update";
+const ENV_FLAG = "T3CODE_DISABLE_AUTO_UPDATE";
+const BREW_CASK = "t3-code";
+const isMac = process.platform === "darwin";
+const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
+
+// ---------- Paths and configuration ----------
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+function globDir(pattern: string): string[] {
+  const dir = dirname(pattern);
+  const re = new RegExp(`^${escapeRegExp(basename(pattern)).replace("\\*", ".*")}$`);
+  try {
+    return readdirSync(dir).filter((x) => re.test(x)).map((x) => join(dir, x)).sort();
+  } catch {
+    return [];
+  }
+}
+
+/** Global npm install of the `t3` server package (`npm i -g t3`), if present. */
+function globalNpmPackage(): string | undefined {
+  const result = spawnSync("npm", ["root", "-g"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  const root = result.stdout?.trim();
+  if (!root) return undefined;
+  const dir = join(root, "t3");
+  return existsSync(join(dir, "dist", "client", "index.html")) ? dir : undefined;
+}
+
+function appDirs(): string[] {
+  const override = process.env.T3CODE_APP_DIRS?.split("\n").filter(Boolean);
+  if (override?.length) return override;
+  const dirs: string[] = [];
+  if (isMac) dirs.push(...globDir("/Applications/T3 Code*.app"));
+  else if (process.platform === "linux") dirs.push("/opt/t3code-bin", "/opt/t3code-nightly-bin");
+  else if (process.platform === "win32" && process.env.LOCALAPPDATA) {
+    dirs.push(join(process.env.LOCALAPPDATA, "Programs", "T3 Code"));
+  }
+  const npmPackage = globalNpmPackage();
+  if (npmPackage) dirs.push(npmPackage);
+  return dirs;
+}
+
+function configPath(): string {
+  if (isMac) return join(home, "Library", "Application Support", "t3code-rtl", "config.json");
+  return join(process.env.XDG_CONFIG_HOME ?? join(home, ".config"), "t3code-rtl", "config.json");
+}
+
+function readConfig(): Config {
+  try {
+    return JSON.parse(readFileSync(configPath(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function saveConfig(value: Config) {
+  mkdirSync(dirname(configPath()), { recursive: true });
+  writeFileSync(configPath(), JSON.stringify(value, null, 2) + "\n");
+}
+
+function agentPath() {
+  return join(home, "Library", "LaunchAgents", `${AGENT_LABEL}.plist`);
+}
+
+// ---------- Application bundle inspection ----------
+
+type Layout = {
+  app: string;
+  resources: string;
+  kind: "unpacked" | "asar" | "npm";
+  html: string; // path of the index.html that is read/written
+};
+
+function findLayout(app: string): Layout | undefined {
+  // `t3` npm package (npx t3 / npm i -g t3): the server serves dist/client directly.
+  const npmIndex = join(app, "dist", "client", "index.html");
+  if (existsSync(npmIndex)) return { app, resources: app, kind: "npm", html: npmIndex };
+  for (const middle of ["resources", "Contents/Resources"]) {
+    const resources = join(app, middle);
+    const unpacked = join(resources, "app.asar.unpacked", CLIENT_INDEX);
+    if (existsSync(join(resources, "app.asar"))) return { app, resources, kind: "asar", html: unpacked };
+    if (existsSync(unpacked)) return { app, resources, kind: "unpacked", html: unpacked };
+  }
+  return undefined;
+}
+
+function isPatched(layout: Layout): boolean {
+  try {
+    return readFileSync(layout.html, "utf8").includes(BEGIN);
+  } catch {
+    return false;
+  }
+}
+
+/** Returns true/false when the Electron binary states its ASAR integrity setting, undefined when unknown. */
+function asarIntegrityEnforced(app: string): boolean | undefined {
+  const sentinel = Buffer.from("dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX");
+  const framework = join(app, "Contents", "Frameworks", "Electron Framework.framework", "Versions");
+  if (!existsSync(framework)) return undefined;
+  for (const version of readdirSync(framework)) {
+    try {
+      const data = readFileSync(join(framework, version, "Electron Framework"));
+      const at = data.indexOf(sentinel);
+      if (at >= 0) return data[at + sentinel.length + 2 + 4] === 0x31;
+    } catch {}
+  }
+  return undefined;
+}
+
+// ---------- Payload and HTML injection ----------
+
+function supportFile(name: string): string {
+  for (const path of [join(root, name), join(root, "fonts", name)]) if (existsSync(path)) return path;
+  throw new Error(`${name} is missing from the package`);
+}
+
+function payload(): string {
+  const js = readFileSync(supportFile("rtl.js"), "utf8");
+  const font = readFileSync(supportFile("AradNLVF.woff2")).toString("base64");
+  return js.replace("__T3CODE_ARAD_FONT__", `data:font/woff2;base64,${font}`);
+}
+
+const injectedBlock = new RegExp(`[ \\t]*${escapeRegExp(BEGIN)}[\\s\\S]*?${escapeRegExp(END)}\\n?`, "g");
+
+function stripBlock(html: string): string {
+  return html.replace(injectedBlock, "");
+}
+
+function inject(html: string, js: string): string {
+  const clean = stripBlock(html);
+  if (!clean.includes("</body>")) throw new Error("index.html has no </body>");
+  return clean.replace("</body>", `${BEGIN}\n<script>\n${js}</script>\n${END}\n  </body>`);
+}
+
+// ---------- ASAR handling ----------
+
+type AsarEntry = { offset?: string; size: number; unpacked?: boolean; integrity?: unknown };
+
+function asarEntry(header: any): AsarEntry | undefined {
+  let node = header;
+  for (const part of CLIENT_INDEX.split("/")) node = node?.files?.[part];
+  return node;
+}
+
+function integrity(data: Buffer) {
+  const blockSize = 4 * 1024 * 1024;
+  const hash = (x: Buffer) => createHash("sha256").update(x).digest("hex");
+  const blocks: string[] = [];
+  for (let i = 0; i < data.length; i += blockSize) blocks.push(hash(data.subarray(i, i + blockSize)));
+  return { algorithm: "SHA256", hash: hash(data), blockSize, blocks };
+}
+
+function patchAsar(layout: Layout, js: string) {
+  const asar = join(layout.resources, "app.asar");
+  const raw = readFileSync(asar);
+  const jsonLen = raw.readUInt32LE(12);
+  const header = JSON.parse(raw.subarray(16, 16 + jsonLen).toString());
+  const entry = asarEntry(header);
+  if (!entry) throw new Error("client index was not found in app.asar");
+
+  const target = layout.html;
+  let html: string;
+  if (entry.unpacked && existsSync(target)) {
+    html = readFileSync(target, "utf8");
+  } else {
+    const base = 8 + raw.readUInt32LE(4) + Number(entry.offset);
+    html = raw.subarray(base, base + Number(entry.size)).toString();
+  }
+
+  const patched = Buffer.from(inject(html, js));
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, patched);
+  chmodSync(target, 0o644);
+
+  delete entry.offset;
+  entry.size = patched.length;
+  entry.unpacked = true;
+  entry.integrity = integrity(patched);
+  const encoded = Buffer.from(JSON.stringify(header));
+  if (encoded.length > jsonLen) throw new Error("patched ASAR header would grow");
+  encoded.copy(raw, 16);
+  raw.fill(0x20, 16 + encoded.length, 16 + jsonLen);
+  writeFileSync(asar, raw);
+}
+
+// ---------- Patch / unpatch ----------
+
+function patchApp(layout: Layout, js: string) {
+  if (existsSync(layout.html)) {
+    // Either a plain unpacked layout or an ASAR layout whose override file already exists.
+    writeFileSync(layout.html, inject(readFileSync(layout.html, "utf8"), js));
+    return;
+  }
+  const enforced = asarIntegrityEnforced(layout.app);
+  if (enforced !== false && !process.env.T3CODE_RTL_FORCE) {
+    throw new Error(
+      `ASAR integrity validation is ${enforced ? "enabled" : "unknown"}; refusing to patch. ` +
+        `Set T3CODE_RTL_FORCE=1 to try anyway (the app may fail to start).`,
+    );
+  }
+  patchAsar(layout, js);
+}
+
+function patch() {
+  const js = payload();
+  let count = 0;
+  for (const app of appDirs()) {
+    const layout = findLayout(app);
+    if (!layout) continue;
+    try {
+      patchApp(layout, js);
+      count++;
+      p.log.success(`Patched ${basename(app)}`);
+    } catch (e) {
+      p.log.error(`${basename(app)}: ${(e as Error).message}`);
+    }
+  }
+  if (!count) throw new Error("No T3 Code installation was patched.");
+  p.log.info("Restart T3 Code to see the change.");
+}
+
+function unpatch() {
+  let count = 0;
+  for (const app of appDirs()) {
+    const layout = findLayout(app);
+    if (!layout || !isPatched(layout)) continue;
+    // For ASAR layouts the header keeps pointing at the unpacked override; a clean
+    // override file is equivalent to the original page, so stripping is sufficient.
+    writeFileSync(layout.html, stripBlock(readFileSync(layout.html, "utf8")));
+    count++;
+    p.log.success(`Removed patch from ${basename(app)}`);
+  }
+  if (!count) p.log.info("No patched T3 Code installation was found.");
+  return count;
+}
+
+// ---------- Update mode / LaunchAgent ----------
+
+function launchctl(args: string[], quiet = false) {
+  return spawnSync("launchctl", args, { stdio: quiet ? "ignore" : "inherit" }).status === 0;
+}
+
+function brewCaskInstalled(): boolean {
+  return spawnSync("brew", ["list", "--cask", BREW_CASK], { stdio: "ignore" }).status === 0;
+}
+
+function removeAgent(config: Config) {
+  if (!isMac) return;
+  launchctl(["bootout", `gui/${process.getuid?.()}/${AGENT_LABEL}`], true);
+  try {
+    unlinkSync(agentPath());
+  } catch {}
+  if (config.managedByPatch) launchctl(["unsetenv", ENV_FLAG], true);
+}
+
+function setMode(mode: UpdateMode) {
+  const config = readConfig();
+  if (!isMac) {
+    saveConfig({ ...config, updateMode: "native" });
+    return;
+  }
+  removeAgent(config);
+  if (mode === "managed") {
+    mkdirSync(dirname(agentPath()), { recursive: true });
+    writeFileSync(
+      agentPath(),
+      `<?xml version="1.0"?><plist version="1.0"><dict>` +
+        `<key>Label</key><string>${AGENT_LABEL}</string>` +
+        `<key>ProgramArguments</key><array><string>/bin/launchctl</string><string>setenv</string>` +
+        `<string>${ENV_FLAG}</string><string>true</string></array>` +
+        `<key>RunAtLoad</key><true/></dict></plist>`,
+    );
+    launchctl(["bootstrap", `gui/${process.getuid?.()}`, agentPath()]);
+    launchctl(["setenv", ENV_FLAG, "true"]);
+    saveConfig({ ...config, updateMode: mode, managedByPatch: true });
+  } else {
+    saveConfig({ ...config, updateMode: mode, managedByPatch: false });
+  }
+}
+
+// ---------- Commands ----------
+
+async function approve(message: string) {
+  const answer = await p.confirm({ message });
+  if (p.isCancel(answer) || !answer) {
+    p.cancel("No changes were made.");
+    return false;
+  }
+  return true;
+}
+
+function requireSupportedPlatform() {
+  if (isMac || process.platform === "linux" || process.platform === "win32") return;
+  throw new Error(
+    `${process.platform} is not supported. t3code-rtl works on macOS, Linux, and Windows.\n` +
+      `You can still point it at an app directory with T3CODE_APP_DIRS.`,
+  );
+}
+
+async function setup() {
+  p.intro("T3 Code RTL Patch");
+  const found = appDirs().filter(existsSync);
+  if (!found.length) {
+    p.outro("T3 Code was not found.");
+    return;
+  }
+  p.log.success(`Found ${found.map((path) => basename(path)).join(", ")}`);
+
+  let mode: UpdateMode = "native";
+  if (isMac) {
+    const viaBrew = brewCaskInstalled();
+    if (!viaBrew) p.log.warn(`Homebrew cask "${BREW_CASK}" is not installed; managed updates are unavailable.`);
+    const answer = await p.select({
+      message: "How should updates work?",
+      options: [
+        ...(viaBrew ? [{ value: "managed", label: "Homebrew + automatic re-patch", hint: "recommended" }] : []),
+        { value: "native", label: "Keep T3 Code automatic updates", hint: "patch manually afterward" },
+      ],
+    });
+    if (p.isCancel(answer)) return p.cancel("Cancelled.");
+    mode = answer as UpdateMode;
+  }
+
+  if (!(await approve(`This will configure ${mode} updates and modify ${found.length} T3 Code app bundle(s). Continue?`))) return;
+  setMode(mode);
+  patch();
+  p.outro("Ready.");
+}
+
+function status() {
+  const apps = appDirs().filter(existsSync);
+  if (!apps.length) {
+    console.log("T3 Code: not found");
+  } else {
+    for (const app of apps) {
+      const layout = findLayout(app);
+      const state = !layout ? "unrecognized layout" : isPatched(layout) ? "patched" : "not patched";
+      console.log(`${basename(app)}: ${state}  (${app})`);
+    }
+  }
+  console.log(`Update mode: ${readConfig().updateMode ?? "not configured"}`);
+}
+
+function doctor() {
+  const config = readConfig();
+  console.log(`Platform: ${process.platform} (${isMac || process.platform === "linux" ? "supported" : process.platform === "win32" ? "untested" : "unsupported"})`);
+  console.log(`Node: ${process.version}`);
+  console.log(`Config: ${configPath()} ${existsSync(configPath()) ? "" : "(missing)"}`);
+  console.log(`Update mode: ${config.updateMode ?? "not configured"}`);
+  if (isMac) {
+    console.log(`Homebrew cask "${BREW_CASK}": ${brewCaskInstalled() ? "installed" : "not installed"}`);
+    console.log(`LaunchAgent: ${existsSync(agentPath()) ? "present" : "absent"}`);
+    const env = spawnSync("launchctl", ["getenv", ENV_FLAG], { encoding: "utf8" }).stdout?.trim();
+    console.log(`${ENV_FLAG} (launchctl): ${env || "unset"}`);
+  }
+  const apps = appDirs().filter(existsSync);
+  console.log(`Apps: ${apps.length ? "" : "none found"}`);
+  for (const app of apps) {
+    const layout = findLayout(app);
+    console.log(`  ${app}`);
+    if (!layout) {
+      console.log("    layout: unrecognized");
+      continue;
+    }
+    console.log(`    layout: ${layout.kind}`);
+    console.log(`    patched: ${isPatched(layout) ? "yes" : "no"}`);
+    if (layout.kind === "asar") {
+      const enforced = asarIntegrityEnforced(app);
+      console.log(`    asar integrity: ${enforced === undefined ? "unknown" : enforced ? "enabled" : "disabled"}`);
+    }
+  }
+}
+
+async function update() {
+  if (!isMac) throw new Error("Update T3 Code through your package manager, then run: t3code-rtl patch");
+  if (!brewCaskInstalled()) {
+    throw new Error(`Homebrew cask "${BREW_CASK}" is not installed. Update T3 Code manually, then run: t3code-rtl patch`);
+  }
+  if (!(await approve("This will update T3 Code with Homebrew and modify its app bundle. Continue?"))) return;
+  execFileSync("brew", ["upgrade", "--cask", "--greedy", BREW_CASK], { stdio: "inherit" });
+  patch();
+}
+
+async function uninstall() {
+  const agent = isMac && existsSync(agentPath());
+  const message = agent
+    ? "This will remove the RTL patch, the LaunchAgent, and re-enable T3 Code automatic updates. Continue?"
+    : "This will remove the RTL patch from T3 Code. Continue?";
+  if (!(await approve(message))) return;
+  unpatch();
+  const config = readConfig();
+  removeAgent(config);
+  try {
+    unlinkSync(configPath());
+  } catch {}
+  p.log.info("Restart T3 Code to finish.");
+}
+
+async function interactive() {
+  if (!readConfig().updateMode) return setup();
+  p.intro("T3 Code RTL Patch");
+  const action = await p.select({
+    message: "What do you want to do?",
+    options: [
+      { value: "patch", label: "Apply patch now" },
+      { value: "status", label: "Check status" },
+      { value: "setup", label: "Change update strategy" },
+      ...(isMac ? [{ value: "update", label: "Update T3 Code now" }] : []),
+      { value: "unpatch", label: "Remove patch and settings" },
+    ],
+  });
+  if (p.isCancel(action)) return p.cancel("Cancelled.");
+  if (action === "patch") {
+    if (await approve("This will modify the T3 Code app bundle. Continue?")) patch();
+  } else if (action === "status") status();
+  else if (action === "setup") await setup();
+  else if (action === "update") await update();
+  else await uninstall();
+  p.outro("Done.");
+}
+
+const USAGE = "Usage: t3code-rtl [setup|patch|unpatch|status|doctor|update]";
+
+async function main() {
+  const command = process.argv[2];
+  try {
+    if (command === "doctor") return doctor();
+    requireSupportedPlatform();
+    if (!command) await interactive();
+    else if (command === "setup") await setup();
+    else if (command === "patch") {
+      if (await approve("This will modify the T3 Code app bundle. Continue?")) patch();
+    } else if (command === "unpatch") await uninstall();
+    else if (command === "status") status();
+    else if (command === "update") await update();
+    else if (command === "help" || command === "--help" || command === "-h") console.log(USAGE);
+    else throw new Error(USAGE);
+  } catch (e) {
+    p.log.error((e as Error).message);
+    process.exitCode = 1;
+  }
+}
+
 void main();

@@ -4,7 +4,9 @@
   "description": "Persian and Arabic RTL support for T3 Code.",
   "license": "MIT",
   "type": "module",
-  "bin": { "t3code-rtl": "dist/cli.js" },
+  "bin": {
+    "t3code-rtl": "dist/cli.js"
+  },
   "files": [
     "dist",
     "rtl.js",
@@ -27,7 +29,8 @@
     "build": "tsup src/cli.ts --format esm --platform node --target node20",
     "check": "tsc --noEmit",
     "dev": "tsx src/cli.ts",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "test:smoke": "bash scripts/smoke.sh"
   },
   "dependencies": {
     "@clack/prompts": "^1.7.0"

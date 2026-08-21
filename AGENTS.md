@@ -41,7 +41,15 @@ Run the smallest relevant checks before handing off a change:
 npm run check
 npm run build
 npm pack --dry-run
+npm run test:smoke            # fake bundles only, fast
+SMOKE_T3=1 npm run test:smoke # also installs the `t3` npm package and checks the served page
 ```
+
+`scripts/smoke.sh` runs inside a temp directory with an isolated `HOME` and
+removes everything on exit, including on failure or interruption. Any ad-hoc
+test must follow the same rule: isolate with `T3CODE_APP_DIRS` and `HOME`,
+and clean up temp files, installed packages, and background servers
+afterwards. Never leave test artifacts behind.
 
 Use a real macOS T3 Code installation for release validation when a change
 touches app patching, updates, or LaunchAgent behavior. Do not modify a user's
