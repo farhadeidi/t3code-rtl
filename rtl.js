@@ -37,6 +37,7 @@
       gate: "[data-timeline-root]",
       blocks:
         "p, li, blockquote, h1, h2, h3, h4, h5, h6, td, th, dt, dd, summary, figcaption",
+      align: "table",
     },
     {
       // The composer drawer: pending question cards, approval requests and the
@@ -68,6 +69,10 @@
   ].join(", ");
 
   const FLAG = "data-t3code-rtl";
+  // Tables are aligned but never flipped: column order stays as authored,
+  // while every cell of a table that holds Persian shares one edge, so a
+  // single English cell does not leave the column ragged.
+  const ALIGN_FLAG = "data-t3code-rtl-align";
 
   // Persian font. AradNL has no Latin glyphs at all, so putting it after the
   // app's DM Sans (whose @font-face is unicode-range-limited to Latin) makes the
@@ -100,6 +105,14 @@ body, .font-sans {
   font-family: ${SANS_STACK};
 }
 [${FLAG}] {
+  text-align: right;
+}
+/* Upstream aligns table cells left with a rule of the form
+   ".chat-markdown th, .chat-markdown td", which outranks a bare attribute
+   selector, so a flipped cell kept its right-to-left text but stayed
+   left-aligned. Matching that specificity is enough, because this stylesheet
+   is appended last and wins the tie. */
+[${ALIGN_FLAG}] th, [${ALIGN_FLAG}] td {
   text-align: right;
 }
 [${FLAG}] code,
@@ -144,6 +157,12 @@ body, .font-sans {
     }
   }
 
+  /** Alignment only: no dir attribute, so column order is left alone. */
+  function setAlignment(el) {
+    if (hasPersian(el)) el.setAttribute(ALIGN_FLAG, "");
+    else el.removeAttribute(ALIGN_FLAG);
+  }
+
   function applyToRoot(root, scope) {
     if (root.closest(SKIP)) return;
     const blocks = root.querySelectorAll(scope.blocks);
@@ -152,6 +171,10 @@ body, .font-sans {
     for (const el of targets) {
       if (el !== root && el.closest(SKIP)) continue;
       setDirection(el);
+    }
+    if (!scope.align) return;
+    for (const el of root.querySelectorAll(scope.align)) {
+      if (!el.closest(SKIP)) setAlignment(el);
     }
   }
 
