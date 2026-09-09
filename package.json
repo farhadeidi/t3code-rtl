@@ -1,6 +1,6 @@
 {
   "name": "t3code-rtl",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Persian and Arabic RTL support for T3 Code.",
   "license": "MIT",
   "type": "module",
