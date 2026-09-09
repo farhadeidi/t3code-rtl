@@ -1,5 +1,5 @@
 /*
- * T3 Code — Persian/Arabic bidi patch (chat messages only).
+ * T3 Code — Persian/Arabic bidi patch (chat messages and pending questions).
  *
  * Upstream has no RTL support: pingdotgg/t3code#1771 is still open and every
  * attempt to land it (#1320, #1484, #2128) was closed unmerged.
@@ -8,8 +8,9 @@
  *   - A block goes dir="rtl" if it contains ANY Persian/Arabic character.
  *     Not "first strong character" — a single Persian word is enough.
  *   - Blocks with no Persian are left completely untouched.
- *   - Only chat message bodies are scanned. The composer, sidebar and the rest
- *     of the UI are never touched.
+ *   - Only chat message bodies and the composer drawer that holds pending
+ *     questions and approvals are scanned. The composer input, sidebar and the
+ *     rest of the UI are never touched.
  *   - Code blocks, inline code, diffs and terminals are excluded from both the
  *     detection and the flip, and stay LTR even inside an RTL paragraph.
  */
@@ -23,11 +24,31 @@
   // Hebrew is deliberately not included.
   const RTL_CHAR = /[؀-ۿݐ-ݿࡰ-࢟ࢠ-ࣿﭐ-﷿ﹰ-﻿]/;
 
-  // Roots that count as "a chat message body".
-  const MESSAGE_BODY = '.chat-markdown, [data-user-message-body="true"]';
-
-  // Block-level elements inside a message that get their own direction.
-  const BLOCKS = "p, li, blockquote, h1, h2, h3, h4, h5, h6, td, th, dt, dd, summary, figcaption";
+  // Regions that are scanned, each with its own notion of a "block".
+  //
+  //   root   — a container whose contents may be flipped.
+  //   gate   — cheap ancestor/descendant test that keeps unrelated mutations
+  //            (terminal output, file trees, menus) out of the scan entirely.
+  //   blocks — elements inside a root that get their own direction.
+  const SCOPES = [
+    {
+      // Chat message bodies inside the conversation timeline.
+      root: '.chat-markdown, [data-user-message-body="true"]',
+      gate: "[data-timeline-root]",
+      blocks:
+        "p, li, blockquote, h1, h2, h3, h4, h5, h6, td, th, dt, dd, summary, figcaption",
+    },
+    {
+      // The composer drawer: pending question cards, approval requests and the
+      // plan-ready strip. It lives in the composer form, outside the timeline,
+      // so it needs a root of its own. Its text sits in generated markup with
+      // no semantic block elements, hence the wider block list — the drawer is
+      // small, so scanning it is cheap.
+      root: '[data-chat-composer-top-drawer="true"]',
+      gate: '[data-chat-composer-top-drawer="true"]',
+      blocks: "p, button, span",
+    },
+  ];
 
   // Anything under these never triggers RTL and never gets flipped.
   const SKIP = [
@@ -58,6 +79,8 @@
 
   const style = document.createElement("style");
   style.id = "t3code-rtl-patch-style";
+  // Unlayered on purpose: upstream Tailwind utilities live in @layer utilities,
+  // so these rules win over `text-left` on a flipped button without !important.
   style.textContent = `
 @font-face {
   font-family: "AradNL";
@@ -121,35 +144,35 @@ body, .font-sans {
     }
   }
 
-  function applyToBody(body) {
-    if (body.closest(SKIP)) return;
-    const blocks = body.querySelectorAll(BLOCKS);
-    // User messages are plain text with no block children — flip the body itself.
-    const targets = blocks.length > 0 ? blocks : [body];
+  function applyToRoot(root, scope) {
+    if (root.closest(SKIP)) return;
+    const blocks = root.querySelectorAll(scope.blocks);
+    // User messages are plain text with no block children — flip the root itself.
+    const targets = blocks.length > 0 ? blocks : [root];
     for (const el of targets) {
-      if (el !== body && el.closest(SKIP)) continue;
+      if (el !== root && el.closest(SKIP)) continue;
       setDirection(el);
     }
   }
 
-  const pending = new Set();
+  const pending = new Map(); // root element -> scope
   let scheduled = false;
 
   function flush() {
     if (!scheduled) return;
     scheduled = false;
-    const bodies = [...pending];
+    const roots = [...pending];
     pending.clear();
-    for (const body of bodies) {
-      if (body.isConnected) applyToBody(body);
+    for (const [root, scope] of roots) {
+      if (root.isConnected) applyToRoot(root, scope);
     }
   }
 
   // rAF keeps streaming updates to one pass per frame, but it never fires while
   // the window is hidden — the timeout makes sure a backgrounded agent run still
   // gets its text flipped.
-  function schedule(body) {
-    pending.add(body);
+  function schedule(root, scope) {
+    pending.set(root, scope);
     if (scheduled) return;
     scheduled = true;
     requestAnimationFrame(flush);
@@ -162,17 +185,17 @@ body, .font-sans {
       if (parent) collect(parent);
       return;
     }
-    // closest() only walks up. Switching threads replaces a container ABOVE
-    // [data-timeline-root], so an up-only gate drops the whole incoming thread
-    // and it stays LTR until some unrelated mutation lands inside it. Check
-    // downwards too, then verify the timeline constraint per message body.
-    if (!node.closest("[data-timeline-root]") && !node.querySelector("[data-timeline-root]")) {
-      return;
-    }
-    const own = node.closest(MESSAGE_BODY);
-    if (own && own.closest("[data-timeline-root]")) schedule(own);
-    for (const body of node.querySelectorAll(MESSAGE_BODY)) {
-      if (body.closest("[data-timeline-root]")) schedule(body);
+    for (const scope of SCOPES) {
+      // closest() only walks up. Switching threads replaces a container ABOVE
+      // [data-timeline-root], so an up-only gate drops the whole incoming thread
+      // and it stays LTR until some unrelated mutation lands inside it. Check
+      // downwards too, then verify the gate per root.
+      if (!node.closest(scope.gate) && !node.querySelector(scope.gate)) continue;
+      const own = node.closest(scope.root);
+      if (own && own.closest(scope.gate)) schedule(own, scope);
+      for (const root of node.querySelectorAll(scope.root)) {
+        if (root.closest(scope.gate)) schedule(root, scope);
+      }
     }
   }
 
@@ -189,7 +212,11 @@ body, .font-sans {
 
   function start() {
     // Synchronous first pass so nothing is ever painted left-aligned first.
-    for (const body of document.querySelectorAll(MESSAGE_BODY)) applyToBody(body);
+    for (const scope of SCOPES) {
+      for (const root of document.querySelectorAll(scope.root)) {
+        if (root.closest(scope.gate)) applyToRoot(root, scope);
+      }
+    }
     observer.observe(document.body, {
       childList: true,
       subtree: true,

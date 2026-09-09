@@ -1,17 +1,18 @@
 # t3code-rtl
 
-Persian and Arabic right-to-left support for T3 Code chat messages.
+Persian and Arabic right-to-left support for T3 Code chat messages and question prompts.
 
-`t3code-rtl` patches T3 Code locally. Persian and Arabic message blocks become RTL and use the bundled Arad font; code blocks, terminals, diffs, the composer, and the sidebar remain LTR.
+`t3code-rtl` patches T3 Code locally. Persian and Arabic message blocks become RTL and use the bundled Arad font; code blocks, terminals, diffs, the composer input, and the sidebar remain LTR.
 
 ## What it changes — and what it does not
 
-**Only paragraphs inside chat messages that contain Persian or Arabic text are affected. Nothing else in T3 Code is changed.**
+**Only blocks that contain Persian or Arabic text are affected, and only inside chat messages and the drawer above the composer. Nothing else in T3 Code is changed.**
 
 - A paragraph, list item, heading, or table cell inside a chat message gets `dir="rtl"` and the Arad font only if it contains at least one Persian or Arabic character.
-- Every block without such text is left exactly as it was — same direction, same font, same styling.
-- Code blocks, inline code, diffs, and terminal output are never flipped, even when they appear inside an RTL paragraph.
-- The composer, sidebar, menus, settings, and the rest of the interface are never touched.
+- The drawer above the composer — the question card, its options, approval requests — is treated the same way: a question, an option label, or an option description with Persian or Arabic text becomes RTL. An option row with RTL text also mirrors, so its shortcut number sits on the left.
+- Every block without such text is left exactly as it was — same direction, same font, same styling. A card with an English header and Persian options keeps the header LTR.
+- Code blocks, inline code, diffs, terminal output, and keyboard shortcut badges are never flipped, even when they appear inside an RTL block.
+- The composer input, sidebar, menus, settings, and the rest of the interface are never touched.
 
 The patch is a single small script injected into the app's `index.html`. It does not change any application logic, settings, data, or network behavior.
 
