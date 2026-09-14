@@ -12,6 +12,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
 import * as p from "@clack/prompts";
 
 type UpdateMode = "managed" | "native";
@@ -263,6 +264,79 @@ function unpatch() {
   return count;
 }
 
+// ---------- Versions and update check ----------
+
+const packageVersion: string = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
+
+/** Installed version of a T3 Code app or `t3` package, read from local metadata only. */
+function installedVersion(app: string): string | undefined {
+  try {
+    const pkg = join(app, "package.json");
+    if (existsSync(pkg)) return JSON.parse(readFileSync(pkg, "utf8")).version;
+    const plist = readFileSync(join(app, "Contents", "Info.plist"), "utf8");
+    return plist.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/)?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+function describeApps(apps: string[]): string {
+  return apps.map((app) => [basename(app), installedVersion(app)].filter(Boolean).join(" ")).join(", ");
+}
+
+type Release = { name: string; latest: string; command: string; current: () => string | undefined };
+
+/** Where the newest version of an installation is published, and how to install it. */
+function releaseSource(app: string): { url: string; command: string } | undefined {
+  const known = BREW_CASKS.find((x) => x.app === basename(app));
+  if (known) return { url: `https://formulae.brew.sh/api/cask/${known.cask}.json`, command: "t3code-rtl update" };
+  if (findLayout(app)?.kind === "npm") return { url: "https://registry.npmjs.org/t3/latest", command: "npm install -g t3@latest" };
+  return undefined;
+}
+
+async function latestVersion(url: string): Promise<string | undefined> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    return response.ok ? (await response.json()).version : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Looks up the newest published versions in the background; sources that fail are skipped. */
+async function fetchReleases(apps: string[]): Promise<Release[]> {
+  const sources = [
+    { name: "t3code-rtl", url: "https://registry.npmjs.org/t3code-rtl/latest", command: "npx t3code-rtl@latest", current: () => packageVersion },
+    ...apps.flatMap((app) => {
+      const source = releaseSource(app);
+      return source ? [{ name: basename(app), ...source, current: () => installedVersion(app) }] : [];
+    }),
+  ];
+  const releases = await Promise.all(sources.map(async ({ url, ...rest }) => ({ ...rest, latest: await latestVersion(url) })));
+  return releases.filter((release): release is Release => !!release.latest);
+}
+
+function isNewer(latest: string, current: string): boolean {
+  const a = latest.match(/\d+/g)?.map(Number) ?? [];
+  const b = current.match(/\d+/g)?.map(Number) ?? [];
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+  }
+  return false;
+}
+
+/**
+ * Available updates, compared with the versions installed right now (so an update run in
+ * between is not reported). Waits at most `ms` for the lookup; undefined when it did not finish.
+ */
+async function availableUpdates(releases: Promise<Release[]>, ms: number): Promise<string[] | undefined> {
+  const list = await Promise.race([releases, delay(ms, undefined, { ref: false })]);
+  return list?.flatMap(({ name, latest, command, current }) => {
+    const version = current();
+    return version && isNewer(latest, version) ? [`${name} ${version} → ${latest}  (run: ${command})`] : [];
+  });
+}
+
 // ---------- Update mode / LaunchAgent ----------
 
 function launchctl(args: string[], quiet = false) {
@@ -354,13 +428,13 @@ function requireSupportedPlatform() {
 }
 
 async function setup() {
-  p.intro("T3 Code RTL Patch");
+  p.intro(`T3 Code RTL Patch v${packageVersion}`);
   const found = appDirs().filter(existsSync);
   if (!found.length) {
     p.outro("T3 Code was not found.");
     return;
   }
-  p.log.success(`Found ${found.map((path) => basename(path)).join(", ")}`);
+  p.log.success(`Found ${describeApps(found)}`);
 
   let mode: UpdateMode = "native";
   if (isMac) {
@@ -388,24 +462,32 @@ async function setup() {
   p.outro("Ready.");
 }
 
-function status() {
+async function status() {
   const apps = appDirs().filter(existsSync);
+  const releases = fetchReleases(apps);
   if (!apps.length) {
     console.log("T3 Code: not found");
   } else {
     for (const app of apps) {
       const layout = findLayout(app);
       const state = !layout ? "unrecognized layout" : isPatched(layout) ? "patched" : "not patched";
-      console.log(`${basename(app)}: ${state}  (${app})`);
+      const version = installedVersion(app);
+      console.log(`${basename(app)}: ${state}  (${version ? `${version}, ` : ""}${app})`);
     }
   }
   console.log(`Update mode: ${readConfig().updateMode ?? "not configured"}`);
+  console.log(`t3code-rtl: ${packageVersion}`);
+  const updates = await availableUpdates(releases, 3000);
+  if (!updates) console.log("Updates: could not be checked");
+  else if (!updates.length) console.log("Updates: none");
+  else for (const update of updates) console.log(`Update available: ${update}`);
 }
 
 function doctor() {
   const config = readConfig();
   console.log(`Platform: ${process.platform} (${isMac || process.platform === "linux" ? "supported" : process.platform === "win32" ? "untested" : "unsupported"})`);
   console.log(`Node: ${process.version}`);
+  console.log(`t3code-rtl: ${packageVersion}`);
   console.log(`Config: ${configPath()} ${existsSync(configPath()) ? "" : "(missing)"}`);
   console.log(`Update mode: ${config.updateMode ?? "not configured"}`);
   if (isMac) {
@@ -427,6 +509,7 @@ function doctor() {
       console.log("    layout: unrecognized");
       continue;
     }
+    console.log(`    version: ${installedVersion(app) ?? "unknown"}`);
     console.log(`    layout: ${layout.kind}`);
     console.log(`    patched: ${isPatched(layout) ? "yes" : "no"}`);
     if (layout.kind === "asar") {
@@ -475,7 +558,11 @@ async function uninstall() {
 
 async function interactive() {
   if (!readConfig().updateMode) return setup();
-  p.intro("T3 Code RTL Patch");
+  const apps = appDirs().filter(existsSync);
+  // Started before the menu so it never delays it; the result is shown after the action.
+  const releases = fetchReleases(apps);
+  p.intro(`T3 Code RTL Patch v${packageVersion}`);
+  if (apps.length) p.log.info(describeApps(apps));
   const action = await p.select({
     message: "What do you want to do?",
     options: [
@@ -489,18 +576,21 @@ async function interactive() {
   if (p.isCancel(action)) return p.cancel("Cancelled.");
   if (action === "patch") {
     if (await approve("This will modify the T3 Code app bundle. Continue?")) patch();
-  } else if (action === "status") status();
+  } else if (action === "status") await status();
   else if (action === "setup") await setup();
   else if (action === "update") await update();
   else await uninstall();
+  const updates = action === "status" ? [] : await availableUpdates(releases, 2000);
+  if (updates?.length) p.log.warn(`Updates available:\n${updates.join("\n")}`);
   p.outro("Done.");
 }
 
-const USAGE = "Usage: t3code-rtl [setup|patch|unpatch|status|doctor|update]";
+const USAGE = "Usage: t3code-rtl [setup|patch|unpatch|status|doctor|update|--version]";
 
 async function main() {
   const command = process.argv[2];
   try {
+    if (command === "--version" || command === "-v") return console.log(packageVersion);
     if (command === "doctor") return doctor();
     requireSupportedPlatform();
     if (!command) await interactive();
@@ -508,7 +598,7 @@ async function main() {
     else if (command === "patch") {
       if (await approve("This will modify the T3 Code app bundle. Continue?")) patch();
     } else if (command === "unpatch") await uninstall();
-    else if (command === "status") status();
+    else if (command === "status") await status();
     else if (command === "update") await update();
     else if (command === "help" || command === "--help" || command === "-h") console.log(USAGE);
     else throw new Error(USAGE);

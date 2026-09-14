@@ -40,6 +40,10 @@ expect "$(grep -c 't3code-rtl:begin' "$FILE")" 1 "patched once"
 printf "y\n" | node "$CLI" patch >/dev/null
 expect "$(grep -c 't3code-rtl:begin' "$FILE")" 1 "idempotent"
 expect "$(node "$CLI" status | head -1 | grep -c patched)" 1 "status reports patched"
+expect "$(node "$CLI" --version)" "$(node -p "require('$ROOT/package.json').version")" "--version prints the package version"
+mkdir -p "$APP/Contents"
+printf '<plist><dict>\n<key>CFBundleShortVersionString</key>\n<string>9.8.7</string>\n</dict></plist>\n' > "$APP/Contents/Info.plist"
+expect "$(node "$CLI" status | head -1 | grep -c '9.8.7')" 1 "status shows the installed app version"
 printf "y\n" | node "$CLI" unpatch >/dev/null
 expect "$(grep -c 't3code-rtl:begin' "$FILE" || true)" 0 "unpatched"
 

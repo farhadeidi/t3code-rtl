@@ -46,6 +46,8 @@ The first run detects T3 Code, asks how updates should work, applies the patch, 
 
 No background watcher is installed.
 
+The menu shows the `t3code-rtl` version and the installed T3 Code versions right away. While you choose, it asks the npm registry and the Homebrew API (`formulae.brew.sh`) for newer releases and lists any available update after the chosen action finishes, so the menu never waits on the network. `status` does the same check and waits up to three seconds for it.
+
 ## Commands
 
 ```sh
@@ -53,7 +55,7 @@ npx t3code-rtl                 # interactive menu
 npx t3code-rtl setup           # choose update strategy and patch
 npx t3code-rtl patch           # apply the patch
 npx t3code-rtl unpatch         # remove the patch, LaunchAgent, and settings
-npx t3code-rtl status          # show detected apps, patch state, and update mode
+npx t3code-rtl status          # show detected apps, versions, patch state, update mode, and available updates
 npx t3code-rtl doctor          # show detailed diagnostics
 npx t3code-rtl update          # Homebrew update + patch on macOS
 ```
