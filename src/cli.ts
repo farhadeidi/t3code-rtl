@@ -24,7 +24,11 @@ const END = "<!-- t3code-rtl:end -->";
 const CLIENT_INDEX = "apps/server/dist/client/index.html";
 const AGENT_LABEL = "io.github.farhadeidi.t3code-rtl-disable-auto-update";
 const ENV_FLAG = "T3CODE_DISABLE_AUTO_UPDATE";
-const BREW_CASK = "t3-code";
+// Homebrew casks that ship T3 Code, with the app bundle each one installs.
+const BREW_CASKS = [
+  { cask: "t3-code", app: "T3 Code (Alpha).app" },
+  { cask: "t3-code@nightly", app: "T3 Code (Nightly).app" },
+];
 const isMac = process.platform === "darwin";
 const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
 
@@ -265,9 +269,36 @@ function launchctl(args: string[], quiet = false) {
   return spawnSync("launchctl", args, { stdio: quiet ? "ignore" : "inherit" }).status === 0;
 }
 
-function brewCaskInstalled(): boolean {
-  return spawnSync("brew", ["list", "--cask", BREW_CASK], { stdio: "ignore" }).status === 0;
+/** Installed T3 Code casks, or undefined when Homebrew itself is unavailable. */
+function brewCasks(): string[] | undefined {
+  const result = spawnSync("brew", ["list", "--cask", "-1"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  if (result.error || result.status !== 0) return undefined;
+  const installed = new Set(result.stdout.split("\n").map((line) => line.trim()));
+  return BREW_CASKS.map((x) => x.cask).filter((cask) => installed.has(cask));
 }
+
+/** Why `t3code-rtl update` cannot update an installation and what to do instead; undefined when a cask covers it. */
+function manualUpdateHint(app: string, casks: string[]): string | undefined {
+  const known = BREW_CASKS.find((x) => x.app === basename(app));
+  if (known && casks.includes(known.cask)) return undefined;
+  if (known) return `was not installed with Homebrew. Reinstall it with: brew install --cask --force ${known.cask}`;
+  if (!app.endsWith(".app")) return "is the t3 npm package. Update it with: npm install -g t3@latest";
+  return "does not match a known Homebrew cask. Update it manually";
+}
+
+/** Warns about every installation that Homebrew cannot update; returns how many there are. */
+function warnManualUpdates(apps: string[], casks: string[]): number {
+  let count = 0;
+  for (const app of apps) {
+    const hint = manualUpdateHint(app, casks);
+    if (!hint) continue;
+    p.log.warn(`${basename(app)} will not be updated by t3code-rtl update: it ${hint}, then run: t3code-rtl patch`);
+    count++;
+  }
+  return count;
+}
+
+const caskNames = () => BREW_CASKS.map((x) => x.cask).join(", ");
 
 function removeAgent(config: Config) {
   if (!isMac) return;
@@ -333,8 +364,10 @@ async function setup() {
 
   let mode: UpdateMode = "native";
   if (isMac) {
-    const viaBrew = brewCaskInstalled();
-    if (!viaBrew) p.log.warn(`Homebrew cask "${BREW_CASK}" is not installed; managed updates are unavailable.`);
+    const casks = brewCasks();
+    const viaBrew = !!casks?.length;
+    if (!casks) p.log.warn("Homebrew is not installed; managed updates are unavailable.");
+    else if (!viaBrew) p.log.warn(`No T3 Code Homebrew cask (${caskNames()}) is installed; managed updates are unavailable.`);
     const answer = await p.select({
       message: "How should updates work?",
       options: [
@@ -344,6 +377,9 @@ async function setup() {
     });
     if (p.isCancel(answer)) return p.cancel("Cancelled.");
     mode = answer as UpdateMode;
+    if (mode === "managed" && warnManualUpdates(found, casks ?? [])) {
+      p.log.warn("Managed updates also turn off the automatic updater of the apps listed above.");
+    }
   }
 
   if (!(await approve(`This will configure ${mode} updates and modify ${found.length} T3 Code app bundle(s). Continue?`))) return;
@@ -373,7 +409,11 @@ function doctor() {
   console.log(`Config: ${configPath()} ${existsSync(configPath()) ? "" : "(missing)"}`);
   console.log(`Update mode: ${config.updateMode ?? "not configured"}`);
   if (isMac) {
-    console.log(`Homebrew cask "${BREW_CASK}": ${brewCaskInstalled() ? "installed" : "not installed"}`);
+    const casks = brewCasks();
+    if (!casks) console.log("Homebrew: not installed");
+    for (const { cask } of casks ? BREW_CASKS : []) {
+      console.log(`Homebrew cask "${cask}": ${casks?.includes(cask) ? "installed" : "not installed"}`);
+    }
     console.log(`LaunchAgent: ${existsSync(agentPath()) ? "present" : "absent"}`);
     const env = spawnSync("launchctl", ["getenv", ENV_FLAG], { encoding: "utf8" }).stdout?.trim();
     console.log(`${ENV_FLAG} (launchctl): ${env || "unset"}`);
@@ -398,12 +438,24 @@ function doctor() {
 
 async function update() {
   if (!isMac) throw new Error("Update T3 Code through your package manager, then run: t3code-rtl patch");
-  if (!brewCaskInstalled()) {
-    throw new Error(`Homebrew cask "${BREW_CASK}" is not installed. Update T3 Code manually, then run: t3code-rtl patch`);
+  const casks = brewCasks();
+  if (!casks) throw new Error("Homebrew is not installed. Update T3 Code manually, then run: t3code-rtl patch");
+  warnManualUpdates(appDirs().filter(existsSync), casks);
+  if (!casks.length) {
+    throw new Error(`No T3 Code Homebrew cask (${caskNames()}) is installed. Update T3 Code manually, then run: t3code-rtl patch`);
   }
-  if (!(await approve("This will update T3 Code with Homebrew and modify its app bundle. Continue?"))) return;
-  execFileSync("brew", ["upgrade", "--cask", "--greedy", BREW_CASK], { stdio: "inherit" });
+  if (!(await approve(`This will update ${casks.join(", ")} with Homebrew and modify the app bundle(s). Continue?`))) return;
+  const failed: string[] = [];
+  for (const cask of casks) {
+    try {
+      execFileSync("brew", ["upgrade", "--cask", "--greedy", cask], { stdio: "inherit" });
+    } catch {
+      failed.push(cask);
+      p.log.error(`Homebrew could not upgrade ${cask} (see the output above). Fix the problem, then run: t3code-rtl update`);
+    }
+  }
   patch();
+  if (failed.length) process.exitCode = 1;
 }
 
 async function uninstall() {

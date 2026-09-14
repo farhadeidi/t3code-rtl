@@ -59,6 +59,46 @@ expect "$(grep -c 't3code-rtl:begin' "$APP/resources/app.asar.unpacked/$INDEX")"
 printf "y\n" | node "$CLI" unpatch >/dev/null
 expect "$(grep -c 't3code-rtl:begin' "$APP/resources/app.asar.unpacked/$INDEX" || true)" 0 "unpatched"
 
+# --- update through a fake Homebrew (macOS only; the real brew is never called) ---
+if [ "$(uname)" = Darwin ]; then
+  step "update via fake brew"
+  BIN="$TMP/bin"; mkdir -p "$BIN"; export BREW_LOG="$TMP/brew.log"
+  cat > "$BIN/brew" <<'EOF'
+#!/usr/bin/env bash
+[ -n "${FAKE_BREW_MISSING:-}" ] && exit 127
+echo "$*" >> "$BREW_LOG"
+[ "$1" = list ] && printf '%s\n' $FAKE_CASKS
+[ "$1" = upgrade ] && [ "$4" = "${FAKE_FAIL:-}" ] && exit 1
+exit 0
+EOF
+  chmod +x "$BIN/brew"
+  ALPHA="$TMP/apps/T3 Code (Alpha).app"; NIGHTLY="$TMP/apps/T3 Code (Nightly).app"
+  for APP in "$ALPHA" "$NIGHTLY"; do
+    mkdir -p "$APP/resources/app.asar.unpacked/$(dirname "$INDEX")"
+    printf '<html><body>\n  </body></html>\n' > "$APP/resources/app.asar.unpacked/$INDEX"
+  done
+  export T3CODE_APP_DIRS="$ALPHA"$'\n'"$NIGHTLY"
+  run_update() { rm -f "$BREW_LOG"; (printf "y\n" | PATH="$BIN:$PATH" node "$CLI" update 2>&1 || true); }
+
+  OUT="$(FAKE_CASKS="t3-code t3-code@nightly" run_update)"
+  expect "$(grep -c '^upgrade' "$BREW_LOG")" 2 "upgrades alpha and nightly casks"
+  expect "$(grep -c 't3code-rtl:begin' "$NIGHTLY/resources/app.asar.unpacked/$INDEX")" 1 "nightly patched after update"
+
+  OUT="$(FAKE_CASKS="t3-code" run_update)"
+  expect "$(grep -c '^upgrade' "$BREW_LOG")" 1 "upgrades only the installed cask"
+  expect "$(grep -c 'brew install --cask --force t3-code@nightly' <<<"$OUT")" 1 "explains how to update a non-Homebrew nightly"
+
+  OUT="$(FAKE_CASKS="t3-code t3-code@nightly" FAKE_FAIL="t3-code@nightly" run_update)"
+  expect "$(grep -c 'could not upgrade t3-code@nightly' <<<"$OUT")" 1 "reports a failed cask upgrade"
+  expect "$(grep -c 'Patched T3 Code (Alpha).app' <<<"$OUT")" 1 "still patches after a failed upgrade"
+
+  OUT="$(FAKE_CASKS="" run_update)"
+  expect "$(grep -c 'No T3 Code Homebrew cask' <<<"$OUT")" 1 "explains when no cask is installed"
+
+  OUT="$(FAKE_BREW_MISSING=1 run_update)"
+  expect "$(grep -c 'Homebrew is not installed' <<<"$OUT")" 1 "explains when Homebrew is missing"
+fi
+
 # --- real t3 npm package (opt-in: SMOKE_T3=1; downloads ~600 MB, takes minutes) ---
 if [ "${SMOKE_T3:-}" = "1" ]; then
   step "t3 npm package served over HTTP"

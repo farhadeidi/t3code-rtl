@@ -24,7 +24,7 @@ The patch is a single small script injected into the app's `index.html`. It does
 
 Node.js 20 or later, plus one of these T3 Code installations:
 
-- **macOS desktop app:** any `T3 Code*.app` in `/Applications`. The managed update mode additionally requires the Homebrew cask `t3-code`.
+- **macOS desktop app:** any `T3 Code*.app` in `/Applications`. The managed update mode additionally requires the Homebrew cask `t3-code` or `t3-code@nightly`.
 - **Linux desktop app:** `/opt/t3code-bin` or `/opt/t3code-nightly-bin` (AUR packages).
 - **`t3` npm package** (`npm install -g t3`, the same server that `npx t3` runs): detected automatically through `npm root -g`.
 - **Windows desktop app:** `%LOCALAPPDATA%\Programs\T3 Code` (winget). Untested; report problems in the issue tracker.
@@ -41,7 +41,7 @@ npx t3code-rtl
 
 The first run detects T3 Code, asks how updates should work, applies the patch, and remembers the choice. Restart T3 Code afterwards. It has two update modes only:
 
-- **Managed (macOS, recommended):** disables T3 Code's internal updater for this tool and uses `t3code-rtl update` to upgrade via Homebrew and reapply the patch. Only offered when T3 Code was installed with Homebrew.
+- **Managed (macOS, recommended):** disables T3 Code's internal updater for this tool and uses `t3code-rtl update` to upgrade every installed T3 Code cask (`t3-code`, `t3-code@nightly`) via Homebrew and reapply the patch. Only offered when T3 Code was installed with Homebrew. The internal updater is turned off for every T3 Code app, so an app not installed with Homebrew stops updating; `update` names each such app and how to update it (for example `brew install --cask --force t3-code@nightly`).
 - **Native:** leaves T3 Code automatic updates enabled. After an update, run `npx t3code-rtl patch` and restart the app.
 
 No background watcher is installed.
