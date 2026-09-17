@@ -1,0 +1,246 @@
+<!doctype html>
+<!--
+  Source of media/preview.png, the screenshot in README.md.
+
+  It is a static copy of T3 Code's own markup — the attributes rtl.js looks for
+  are the real ones — with the real rtl.js loaded on top, exactly as the patch
+  injects it. To reshoot it:
+
+      python3 -m http.server 8731        # from the repository root
+      # open http://127.0.0.1:8731/media/preview.html at a 1120px-wide viewport
+-->
+<html lang="fa">
+<head>
+<meta charset="utf-8">
+<title>t3code-rtl — preview</title>
+<style>
+  :root {
+    --bg: #1b2721;
+    --surface: #222f28;
+    --surface-2: #2a3830;
+    --composer: #313d36;
+    --border: rgba(255,255,255,.09);
+    --fg: #eef1ee;
+    --muted: #9aa79f;
+    --accent: #e3b34e;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); }
+  body { padding: 28px 0 24px; -webkit-font-smoothing: antialiased; }
+  .thread { width: 768px; margin: 0 auto; }
+  .topbar { display: flex; align-items: center; gap: 8px; color: var(--muted);
+    font-size: 12.5px; padding: 0 4px 18px; }
+  .topbar .dot { width: 6px; height: 6px; border-radius: 99px; background: #6fbf8b; }
+  .topbar .spacer { flex: 1; }
+
+  .row { margin-bottom: 22px; }
+  .row.user { display: flex; flex-direction: column; align-items: flex-end; }
+  .bubble { max-width: 80%; background: var(--surface-2); border-radius: 18px;
+    padding: 10px 14px; font-size: 14.5px; line-height: 1.9; }
+  .attachments { display: flex; gap: 6px; margin-bottom: 6px; justify-content: flex-end; }
+
+  .chat-markdown { font-size: 14.5px; line-height: 1.95; }
+  .chat-markdown p { margin: 0 0 12px; }
+  .chat-markdown h3 { font-size: 15.5px; margin: 20px 0 10px; font-weight: 600; }
+  .chat-markdown ul, .chat-markdown ol { margin: 0 0 12px; padding-inline-start: 22px; }
+  .chat-markdown li { margin-bottom: 4px; }
+  .chat-markdown blockquote { margin: 0 0 12px; padding-inline-start: 12px;
+    border-inline-start: 2px solid rgba(255,255,255,.16); color: var(--muted); }
+  .chat-markdown code { font-family: var(--mono); font-size: 12.5px;
+    background: rgba(255,255,255,.07); border-radius: 5px; padding: 1px 5px; }
+  .chat-markdown table { width: 100%; border-collapse: collapse; margin: 0 0 14px; font-size: 13.5px; }
+  .chat-markdown th, .chat-markdown td { border: 1px solid var(--border);
+    padding: 7px 10px; text-align: left; }
+  .chat-markdown th { background: rgba(255,255,255,.04); font-weight: 600; }
+
+  .chat-markdown-codeblock { background: #16201b; border: 1px solid var(--border);
+    border-radius: 12px; margin: 0 0 14px; overflow: hidden; }
+  .chat-markdown-codeblock .head { display: flex; align-items: center; gap: 8px;
+    padding: 7px 12px; border-bottom: 1px solid var(--border);
+    color: var(--muted); font-size: 11.5px; font-family: var(--mono); }
+  .chat-markdown-codeblock pre { margin: 0; padding: 12px 14px; font-family: var(--mono);
+    font-size: 12.5px; line-height: 1.7; overflow: auto; }
+  .k { color: #c792ea; } .s { color: #a5d6a7; } .f { color: #82aaff; } .c { color: #6b7d72; }
+
+  .tool { display: flex; align-items: center; gap: 10px; color: var(--muted);
+    font-size: 13px; margin: 0 0 10px; }
+  .tool .chev { font-family: var(--mono); }
+  .xterm { background: #131c17; border: 1px solid var(--border); border-radius: 12px;
+    padding: 10px 14px; font-family: var(--mono); font-size: 12px; line-height: 1.75;
+    color: #b9c6bd; margin-bottom: 14px; white-space: pre; }
+  [data-diff] { background: #16201b; border: 1px solid var(--border); border-radius: 12px;
+    font-family: var(--mono); font-size: 12px; line-height: 1.7; overflow: hidden; margin-bottom: 14px; }
+  [data-diff] .l { padding: 1px 14px; }
+  [data-diff] .add { background: rgba(111,191,139,.12); color: #bfe6cd; }
+  [data-diff] .del { background: rgba(224,110,110,.12); color: #e9bcbc; }
+  [data-diff] .hunk { color: var(--muted); padding: 5px 14px; border-bottom: 1px solid var(--border); }
+
+  .queued-wrap { display: flex; flex-direction: column; align-items: flex-end; }
+  .queued { max-width: 80%; border: 1px dashed rgba(255,255,255,.18); border-radius: 18px;
+    padding: 12px 14px; color: rgba(238,241,238,.8); }
+  .queued .text { white-space: pre-wrap; overflow-wrap: break-word; font-size: 14px; line-height: 1.9; }
+  .queued .meta { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .queued .foot { margin-top: 10px; display: flex; align-items: center; gap: 16px;
+    color: var(--muted); font-size: 12px; }
+  .queued .foot .actions { margin-left: auto; display: flex; gap: 2px; }
+
+  .composer-stack { width: 768px; margin: 26px auto 0; }
+  [data-chat-composer-top-drawer="true"] { background: var(--surface);
+    border: 1px solid var(--border); border-radius: 18px; padding: 14px 16px; margin-bottom: 10px; }
+  .q-title { font-size: 14.5px; margin: 0 0 10px; line-height: 1.8; }
+  .q-opt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    background: rgba(255,255,255,.035); border: 1px solid var(--border); color: var(--fg);
+    border-radius: 12px; padding: 9px 12px; margin-bottom: 6px; font: inherit; font-size: 13.5px; }
+  .q-opt .num { font-family: var(--mono); font-size: 11px; color: var(--muted);
+    background: rgba(255,255,255,.07); border-radius: 6px; padding: 1px 6px; }
+  .q-opt .desc { color: var(--muted); font-size: 12.5px; }
+
+  .composer { background: var(--composer); border-radius: 22px; padding: 14px 16px 10px; }
+  [data-lexical-editor="true"] { min-height: 58px; font-size: 14.5px; line-height: 2; outline: none; }
+  [data-lexical-editor="true"] p { margin: 0 0 6px; }
+  .thumbs { display: flex; gap: 8px; margin-bottom: 10px; }
+  .thumb { width: 76px; height: 62px; border-radius: 10px; border: 1px solid var(--border);
+    background: linear-gradient(140deg, #35443b, #202c25); position: relative; }
+  .thumb .x { position: absolute; inset: 0; margin: auto; width: 20px; height: 20px;
+    border-radius: 99px; background: rgba(0,0,0,.45); display: flex; align-items: center;
+    justify-content: center; color: #fff; font-size: 11px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle;
+    background: rgba(255,255,255,.08); border: 1px solid var(--border); border-radius: 999px;
+    padding: 2px 10px 2px 8px; font-size: 12.5px; }
+  .chip .sz { color: var(--muted); font-size: 11px; }
+  .chip .ic { width: 13px; height: 13px; border-radius: 3px; background: #4d5f55; display: inline-block; }
+  .bar { display: flex; align-items: center; gap: 14px; margin-top: 12px; color: var(--muted); font-size: 13px; }
+  .bar .sep { width: 1px; height: 16px; background: var(--border); }
+  .bar .spacer { flex: 1; }
+  .send { width: 30px; height: 30px; border-radius: 99px; background: var(--accent);
+    display: flex; align-items: center; justify-content: center; color: #2a2205; }
+  .footbar { display: flex; align-items: center; color: var(--muted); font-size: 12.5px;
+    padding: 9px 18px 0; }
+  .footbar .spacer { flex: 1; }
+  svg { display: block; }
+</style>
+</head>
+<body>
+
+<div class="thread">
+  <div class="topbar"><span class="dot"></span> پشتیبانی RTL برای T3 Code<span class="spacer"></span><span>main · 4 files changed</span></div>
+
+  <div class="row user" data-timeline-root="true">
+    <div class="bubble" data-user-message-body="true">سلام. می‌خوام برای پکیج <code>t3code-rtl</code> یه تست بنویسیم که هر دو حالت شکسته شدن جهت رو پوشش بده.</div>
+  </div>
+
+  <div class="row" data-timeline-root="true">
+    <div class="chat-markdown">
+      <p>باشه. دو تا ریشه‌ی جدا داریم: کارت پیام صف اصلاً داخل محدوده‌ی اسکن نبود، و در کامپوزر مقدار <code>dir="auto"</code> جهتش را از اولین کاراکتر قویِ داخل المنت می‌گیرد — که وقتی فایل اول اضافه شود، برچسب لاتین چیپ است.</p>
+      <h3>چیزهایی که باید پوشش داده شود</h3>
+      <ul>
+        <li>پیام کاربر، پاسخ دستیار، لیست، نقل‌قول و جدول</li>
+        <li>بلوک کد و خروجی ترمینال که هیچ‌وقت نباید بچرخند</li>
+        <li>a fully English paragraph, left exactly as it was</li>
+      </ul>
+      <blockquote>هر بلوکی که حتی یک حرف فارسی داشته باشد RTL می‌شود؛ بقیه دست‌نخورده می‌مانند.</blockquote>
+      <div class="chat-markdown-codeblock">
+        <div class="head">rtl.js</div>
+        <pre><span class="c">// a chip with a dir of its own leaves the paragraph's auto scan</span>
+<span class="k">function</span> <span class="f">isolateDirection</span>(el) {
+  <span class="k">if</span> (!el.hasAttribute(<span class="s">"dir"</span>)) el.setAttribute(<span class="s">"dir"</span>, <span class="s">"auto"</span>);
+}</pre>
+      </div>
+      <table>
+        <thead><tr><th>سطح</th><th>Selector</th><th>نتیجه</th></tr></thead>
+        <tbody>
+          <tr><td>پیام صف</td><td><code>[data-queued-message-id]</code></td><td>متن RTL می‌شود</td></tr>
+          <tr><td>کامپوزر</td><td><code>[data-lexical-decorator]</code></td><td>چیپ جهت خودش را می‌گیرد</td></tr>
+        </tbody>
+      </table>
+      <ol>
+        <li>اسکریپت وصله را اعمال کن</li>
+        <li>اپ را دوباره باز کن</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="row" data-timeline-root="true">
+    <div class="tool"><span class="chev">&gt;_</span> Running <span style="color:var(--fg)">npm run test:smoke</span></div>
+    <div class="xterm">== asar layout
+ok: patched with force
+ok: unpatched
+All smoke tests passed.</div>
+    <div data-diff="true">
+      <div class="hunk">@@ rtl.js — SCOPES</div>
+      <div class="l add">+      root: "[data-queued-message-id]",</div>
+      <div class="l add">+      gate: "[data-timeline-root]",</div>
+      <div class="l del">-    const blocks = root.querySelectorAll(scope.blocks);</div>
+    </div>
+  </div>
+
+  <div class="row user" data-timeline-root="true">
+    <div class="attachments">
+      <span class="chip"><span class="ic"></span>queued.png <span class="sz">131 KB</span></span>
+      <span class="chip"><span class="ic"></span>composer.png <span class="sz">97 KB</span></span>
+    </div>
+    <div class="bubble" data-user-message-body="true">این دو تا اسکرین‌شات همان چیزی است که در تصویرها می‌بینی.</div>
+  </div>
+
+  <div class="row" data-timeline-root="true">
+    <div class="queued-wrap">
+      <div data-queued-message-id="q-1">
+        <div class="queued">
+          <div class="text whitespace-pre-wrap break-words">پس انتظارم ازت اینه که یک بار ببینی چه Xcode 27 همراه با iOS 27 داریم و از قابلیت‌های جذابی که برای ویجت‌ها اضافه کرده‌اند تا جای ممکن استفاده کنیم.</div>
+          <div class="meta">2 attachments, 1 context item</div>
+          <div class="foot">
+            <span style="display:inline-flex;align-items:center;gap:6px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              Queued
+            </span>
+            <span class="actions">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="composer-stack">
+  <div data-chat-composer-top-drawer="true">
+    <p class="q-title">کدام حالت را اول اصلاح کنم؟</p>
+    <button class="q-opt"><span class="num">1</span><span>هر دو با هم <span class="desc">— کارت صف و چیپ کامپوزر</span></span></button>
+    <button class="q-opt"><span class="num">2</span><span>Composer only <span class="desc">— leave the queue for later</span></span></button>
+  </div>
+
+  <div class="composer">
+    <div class="thumbs">
+      <div class="thumb"><span class="x">✕</span></div>
+      <div class="thumb"><span class="x">✕</span></div>
+    </div>
+    <div data-lexical-editor="true" contenteditable="true" spellcheck="false">
+      <p dir="auto"><span class="chip" data-lexical-decorator="true" contenteditable="false"><span class="ic"></span>queued.png <span class="sz">131 KB</span></span>سلام بر تو، ببین دوتا مشکل در RTL داریم که جفتش رو همین‌جا توی تصاویر می‌تونی ببینی.</p>
+    </div>
+    <div class="bar">
+      <span style="color:var(--fg)">✳ Claude Opus 5</span>
+      <span class="sep"></span><span>High · 1M</span>
+      <span class="sep"></span><span>🔓 Full access</span>
+      <span class="spacer"></span>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8.5-8.5a3.5 3.5 0 1 1 5 5L10.5 19"/></svg>
+      <span class="send"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span>
+    </div>
+  </div>
+  <div class="footbar"><span>Current checkout</span><span class="spacer"></span><span>main</span></div>
+</div>
+
+<script>
+  // The patcher rewrites this placeholder to the installed font; do the same here.
+  fetch("../rtl.js")
+    .then((response) => response.text())
+    .then((source) => {
+      const script = document.createElement("script");
+      script.textContent = source.replace("__T3CODE_ARAD_FONT__", "../fonts/AradNLVF.woff2");
+      document.body.appendChild(script);
+    });
+</script>
+</body>
+</html>

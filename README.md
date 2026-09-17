@@ -1,8 +1,10 @@
 # t3code-rtl
 
-Persian and Arabic right-to-left support for T3 Code chat messages and question prompts.
+Persian and Arabic right-to-left support for T3 Code chat messages, queued messages, and question prompts.
 
 `t3code-rtl` patches T3 Code locally. Persian and Arabic message blocks become RTL and use the bundled Arad font; code blocks, terminals, diffs, and the sidebar remain LTR.
+
+![A Persian thread with the patch applied: messages, a queued message, the question drawer and the composer read right to left, while the code block, terminal output and diff stay left to right](https://raw.githubusercontent.com/farhadeidi/t3code-rtl/main/media/preview.png)
 
 ## What it changes — and what it does not
 
@@ -16,6 +18,7 @@ Persian and Arabic right-to-left support for T3 Code chat messages and question 
 - Code blocks, inline code, diffs, terminal output, and keyboard shortcut badges are never flipped, even when they appear inside an RTL block.
 - The composer input keeps the direction T3 Code gives it, which follows the first letter you type. The one change there: an attachment or mention chip gets `dir="auto"`, so a chip named `image.png` no longer makes a Persian message left-to-right when the attachment comes first.
 - The sidebar, menus, settings, and the rest of the interface are never touched.
+- Only the Arabic script is detected, which covers Persian, Arabic, Urdu, and Pashto. Hebrew and other right-to-left scripts are left alone.
 
 The patch is a single small script injected into the app's `index.html`. It does not change any application logic, settings, data, or network behavior.
 
@@ -90,6 +93,8 @@ npx t3 start --port 4711 --base-dir "$PWD/data"
 Open the printed URL and send a Persian or Arabic message. `npx t3code-rtl unpatch` with the same `T3CODE_APP_DIRS` reverts it; delete the sandbox directory when done.
 
 Contributors can run the automated version of this, which cleans up after itself: `npm run test:smoke` (fake bundles) or `SMOKE_T3=1 npm run test:smoke` (also the real `t3` package).
+
+`media/preview.html` is a static copy of T3 Code's markup that loads `rtl.js` the same way the patch does. Serving the repository root and opening it is the quickest way to see a change to `rtl.js`; it is also where the screenshot above comes from.
 
 ## Safety
 
