@@ -6,6 +6,8 @@ Right-to-left (RTL) support for T3 Code. Persian (Farsi) and Arabic chat message
 [![node](https://img.shields.io/node/v/t3code-rtl)](https://nodejs.org)
 [![license](https://img.shields.io/npm/l/t3code-rtl)](LICENSE)
 
+**English** · [فارسی](README.fa.md)
+
 `t3code-rtl` patches T3 Code locally. Persian and Arabic message blocks become RTL and use the bundled Arad font; code blocks, terminals, diffs, and the sidebar remain LTR.
 
 ![A Persian thread with the patch applied: messages, a queued message, the question drawer and the composer read right to left, while the code block, terminal output and diff stay left to right](https://raw.githubusercontent.com/farhadeidi/t3code-rtl/main/media/preview.png)

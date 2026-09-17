@@ -10,6 +10,10 @@ Keep all repository prose, user-facing CLI text, and source code in English.
 The Unicode range in `rtl.js` is intentional: it detects RTL-script content
 and is not user-facing prose.
 
+`README.fa.md` is the one exception: a short Persian summary that helps
+Persian-speaking users find the tool. Keep it in Persian, keep it short, and
+treat `README.md` as the source of truth when the two disagree.
+
 ## Sensitive changes
 
 Get explicit user approval immediately before any action that:
