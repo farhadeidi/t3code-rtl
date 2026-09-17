@@ -1,6 +1,6 @@
 {
   "name": "t3code-rtl",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Right-to-left (RTL) support for T3 Code: patches the app so Persian (Farsi) and Arabic chat messages read right to left.",
   "keywords": [
     "rtl",
