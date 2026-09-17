@@ -29,10 +29,13 @@
   html, body { margin: 0; background: var(--bg); color: var(--fg); }
   body { padding: 28px 0 24px; -webkit-font-smoothing: antialiased; }
   .thread { width: 768px; margin: 0 auto; }
-  .topbar { display: flex; align-items: center; gap: 8px; color: var(--muted);
+  [data-chat-header] { display: flex; align-items: center; gap: 8px; color: var(--muted);
     font-size: 12.5px; padding: 0 4px 18px; }
-  .topbar .dot { width: 6px; height: 6px; border-radius: 99px; background: #6fbf8b; }
-  .topbar .spacer { flex: 1; }
+  [data-chat-header] h2 { font-size: 12.5px; font-weight: 500; margin: 0;
+    color: var(--fg); min-width: 0; }
+  [data-chat-header] .crumb { display: inline-flex; align-items: center; gap: 6px; }
+  [data-chat-header] .dot { width: 6px; height: 6px; border-radius: 99px; background: #6fbf8b; }
+  [data-chat-header] .spacer { flex: 1; }
 
   .row { margin-bottom: 22px; }
   .row.user { display: flex; flex-direction: column; align-items: flex-end; }
@@ -124,7 +127,13 @@
 <body>
 
 <div class="thread">
-  <div class="topbar"><span class="dot"></span> پشتیبانی RTL برای T3 Code<span class="spacer"></span><span>main · 4 files changed</span></div>
+  <div data-chat-header>
+    <span class="crumb"><span class="dot"></span>t3code-rtl</span>
+    <span>›</span>
+    <h2>پشتیبانی RTL برای T3 Code</h2>
+    <span class="spacer"></span>
+    <span>main · 4 files changed</span>
+  </div>
 
   <div class="row user" data-timeline-root="true">
     <div class="bubble" data-user-message-body="true">سلام. می‌خوام برای پکیج <code>t3code-rtl</code> یه تست بنویسیم که هر دو حالت شکسته شدن جهت رو پوشش بده.</div>

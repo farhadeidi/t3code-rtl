@@ -8,11 +8,12 @@ Persian and Arabic right-to-left support for T3 Code chat messages, queued messa
 
 ## What it changes — and what it does not
 
-**Only blocks that contain Persian or Arabic text are affected, and only inside chat messages, queued messages, and the drawer above the composer. Nothing else in T3 Code is changed.**
+**Only blocks that contain Persian or Arabic text are affected, and only inside chat messages, queued messages, the thread title, and the drawer above the composer. Nothing else in T3 Code is changed.**
 
 - A paragraph, list item, heading, or table cell inside a chat message gets `dir="rtl"` and the Arad font only if it contains at least one Persian or Arabic character.
 - The drawer above the composer — the question card, its options, approval requests — is treated the same way: a question, an option label, or an option description with Persian or Arabic text becomes RTL. An option row with RTL text also mirrors, so its shortcut number sits on the left.
 - A message waiting in the queue is treated the same way: its text becomes RTL, while the `Queued` row under it keeps the layout it has everywhere else.
+- The thread title in the chat header becomes RTL when it holds Persian or Arabic text, and the rename field follows whatever you type into it. The breadcrumb beside the title keeps its order.
 - A table that holds Persian or Arabic text keeps its column order, but all of its cells are aligned to the right together, so one English cell does not leave the column ragged. Each cell still becomes RTL only on its own merits.
 - Every block without such text is left exactly as it was — same direction, same font, same styling. A card with an English header and Persian options keeps the header LTR.
 - Code blocks, inline code, diffs, terminal output, and keyboard shortcut badges are never flipped, even when they appear inside an RTL block.

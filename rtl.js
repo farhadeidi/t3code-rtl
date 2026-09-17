@@ -35,6 +35,7 @@
   //   blocks  — elements inside a root that get their own direction.
   //   isolate — elements that only get a direction of their own, so they stop
   //             taking part in the direction of the block around them.
+  //   whole   — flip the root itself when no block matches inside it.
   const SCOPES = [
     {
       // Chat message bodies inside the conversation timeline.
@@ -43,6 +44,7 @@
       blocks:
         "p, li, blockquote, h1, h2, h3, h4, h5, h6, td, th, dt, dd, summary, figcaption",
       align: "table",
+      whole: true,
     },
     {
       // The composer drawer: pending question cards, approval requests and the
@@ -74,6 +76,16 @@
       root: '[data-lexical-editor="true"]',
       gate: '[data-lexical-editor="true"]',
       isolate: '[data-lexical-decorator="true"]',
+    },
+    {
+      // The thread title in the chat header. Only the title flips — it is the
+      // one part of that bar the user wrote. The breadcrumb next to it keeps
+      // its order, the same way a table keeps its columns. The rename field
+      // has no text nodes to scan, so it follows its own value instead.
+      root: "[data-chat-header]",
+      gate: "[data-chat-header]",
+      blocks: "h2",
+      isolate: 'input[aria-label="Thread title"]',
     },
   ];
 
@@ -202,8 +214,10 @@ body, .font-sans {
     if (root.closest(SKIP)) return;
     if (scope.blocks) {
       const blocks = root.querySelectorAll(scope.blocks);
-      // User messages are plain text with no block children — flip the root itself.
-      const targets = blocks.length > 0 ? blocks : [root];
+      // User messages are plain text with no block children — flip the root
+      // itself. Scopes that surround their text with other controls must not
+      // do this: an empty match there means "nothing to flip", not "flip all".
+      const targets = blocks.length > 0 ? blocks : scope.whole ? [root] : [];
       for (const el of targets) {
         if (el !== root && el.closest(SKIP)) continue;
         setDirection(el);
