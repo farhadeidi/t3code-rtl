@@ -1,8 +1,8 @@
 /*
  * T3 Code — Persian/Arabic bidi patch (chat messages and pending questions).
  *
- * Upstream has no RTL support: pingdotgg/t3code#1771 is still open and every
- * attempt to land it (#1320, #1484, #2128) was closed unmerged.
+ * Upstream has no RTL support for chat text: every attempt to land it
+ * (pingdotgg/t3code#1320, #1484, #2128) was closed unmerged.
  *
  * Behaviour, per request:
  *   - A block goes dir="rtl" if it contains ANY Persian/Arabic character.

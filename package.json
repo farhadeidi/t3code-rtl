@@ -1,7 +1,24 @@
 {
   "name": "t3code-rtl",
   "version": "0.2.6",
-  "description": "Persian and Arabic RTL support for T3 Code.",
+  "description": "Right-to-left (RTL) support for T3 Code: patches the app so Persian (Farsi) and Arabic chat messages read right to left.",
+  "keywords": [
+    "rtl",
+    "right-to-left",
+    "bidi",
+    "bidirectional-text",
+    "persian",
+    "farsi",
+    "arabic",
+    "unicode",
+    "i18n",
+    "localization",
+    "t3code",
+    "t3-code",
+    "electron",
+    "cli",
+    "patch"
+  ],
   "license": "MIT",
   "type": "module",
   "bin": {

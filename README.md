@@ -1,10 +1,18 @@
 # t3code-rtl
 
-Persian and Arabic right-to-left support for T3 Code chat messages, queued messages, and question prompts.
+Right-to-left (RTL) support for T3 Code. Persian (Farsi) and Arabic chat messages, queued messages, thread titles, and question prompts read right to left, in a Persian font.
+
+[![npm](https://img.shields.io/npm/v/t3code-rtl?logo=npm&color=cb3837)](https://www.npmjs.com/package/t3code-rtl)
+[![node](https://img.shields.io/node/v/t3code-rtl)](https://nodejs.org)
+[![license](https://img.shields.io/npm/l/t3code-rtl)](LICENSE)
 
 `t3code-rtl` patches T3 Code locally. Persian and Arabic message blocks become RTL and use the bundled Arad font; code blocks, terminals, diffs, and the sidebar remain LTR.
 
 ![A Persian thread with the patch applied: messages, a queued message, the question drawer and the composer read right to left, while the code block, terminal output and diff stay left to right](https://raw.githubusercontent.com/farhadeidi/t3code-rtl/main/media/preview.png)
+
+## Why this exists
+
+T3 Code lays Persian and Arabic chat text out left to right, which leaves punctuation and line breaks in the wrong place and makes a long message hard to follow. Three pull requests that would have added right-to-left support upstream ([#1320](https://github.com/pingdotgg/t3code/pull/1320), [#1484](https://github.com/pingdotgg/t3code/pull/1484), [#2128](https://github.com/pingdotgg/t3code/pull/2128)) were closed without being merged. This tool fixes the copy of T3 Code on your own machine in the meantime.
 
 ## What it changes — and what it does not
 
@@ -96,6 +104,28 @@ Open the printed URL and send a Persian or Arabic message. `npx t3code-rtl unpat
 Contributors can run the automated version of this, which cleans up after itself: `npm run test:smoke` (fake bundles) or `SMOKE_T3=1 npm run test:smoke` (also the real `t3` package).
 
 `media/preview.html` is a static copy of T3 Code's markup that loads `rtl.js` the same way the patch does. Serving the repository root and opening it is the quickest way to see a change to `rtl.js`; it is also where the screenshot above comes from.
+
+## FAQ
+
+### Does it support Farsi?
+
+Yes. Farsi and Persian are the same language. The patch looks for Arabic-script characters, so it also covers Arabic, Dari, Urdu, and Pashto. Hebrew is not detected.
+
+### Does it change my messages or my data?
+
+No. It adds a `dir` attribute and a font to blocks that already hold Persian or Arabic text, in the page T3 Code renders. Application logic, settings, stored threads, and network requests are untouched.
+
+### Does the patch survive a T3 Code update?
+
+No. An update replaces the files the patch writes to. Run `npx t3code-rtl patch` again, or pick managed mode on macOS, where `t3code-rtl update` upgrades the Homebrew cask and reapplies the patch in one step.
+
+### How do I remove it?
+
+`npx t3code-rtl unpatch` removes the injected block, the LaunchAgent, and the settings. Reinstalling T3 Code through its package manager restores the original bundle byte for byte.
+
+### Is this official?
+
+No. It is an unofficial patch, written against the markup T3 Code happens to render today, and it can break when that markup changes. Report anything it breaks in the [issue tracker](https://github.com/farhadeidi/t3code-rtl/issues).
 
 ## Safety
 
