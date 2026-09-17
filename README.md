@@ -2,18 +2,20 @@
 
 Persian and Arabic right-to-left support for T3 Code chat messages and question prompts.
 
-`t3code-rtl` patches T3 Code locally. Persian and Arabic message blocks become RTL and use the bundled Arad font; code blocks, terminals, diffs, the composer input, and the sidebar remain LTR.
+`t3code-rtl` patches T3 Code locally. Persian and Arabic message blocks become RTL and use the bundled Arad font; code blocks, terminals, diffs, and the sidebar remain LTR.
 
 ## What it changes — and what it does not
 
-**Only blocks that contain Persian or Arabic text are affected, and only inside chat messages and the drawer above the composer. Nothing else in T3 Code is changed.**
+**Only blocks that contain Persian or Arabic text are affected, and only inside chat messages, queued messages, and the drawer above the composer. Nothing else in T3 Code is changed.**
 
 - A paragraph, list item, heading, or table cell inside a chat message gets `dir="rtl"` and the Arad font only if it contains at least one Persian or Arabic character.
 - The drawer above the composer — the question card, its options, approval requests — is treated the same way: a question, an option label, or an option description with Persian or Arabic text becomes RTL. An option row with RTL text also mirrors, so its shortcut number sits on the left.
+- A message waiting in the queue is treated the same way: its text becomes RTL, while the `Queued` row under it keeps the layout it has everywhere else.
 - A table that holds Persian or Arabic text keeps its column order, but all of its cells are aligned to the right together, so one English cell does not leave the column ragged. Each cell still becomes RTL only on its own merits.
 - Every block without such text is left exactly as it was — same direction, same font, same styling. A card with an English header and Persian options keeps the header LTR.
 - Code blocks, inline code, diffs, terminal output, and keyboard shortcut badges are never flipped, even when they appear inside an RTL block.
-- The composer input, sidebar, menus, settings, and the rest of the interface are never touched.
+- The composer input keeps the direction T3 Code gives it, which follows the first letter you type. The one change there: an attachment or mention chip gets `dir="auto"`, so a chip named `image.png` no longer makes a Persian message left-to-right when the attachment comes first.
+- The sidebar, menus, settings, and the rest of the interface are never touched.
 
 The patch is a single small script injected into the app's `index.html`. It does not change any application logic, settings, data, or network behavior.
 

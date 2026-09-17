@@ -8,9 +8,12 @@
  *   - A block goes dir="rtl" if it contains ANY Persian/Arabic character.
  *     Not "first strong character" — a single Persian word is enough.
  *   - Blocks with no Persian are left completely untouched.
- *   - Only chat message bodies and the composer drawer that holds pending
- *     questions and approvals are scanned. The composer input, sidebar and the
+ *   - Only chat message bodies, queued messages and the composer drawer that
+ *     holds pending questions and approvals are scanned. The sidebar and the
  *     rest of the UI are never touched.
+ *   - The composer input keeps the direction the editor gives it; the only
+ *     change there is an explicit dir on attachment chips, so their Latin
+ *     labels stop deciding the direction of a Persian message.
  *   - Code blocks, inline code, diffs and terminals are excluded from both the
  *     detection and the flip, and stay LTR even inside an RTL paragraph.
  */
@@ -26,10 +29,12 @@
 
   // Regions that are scanned, each with its own notion of a "block".
   //
-  //   root   — a container whose contents may be flipped.
-  //   gate   — cheap ancestor/descendant test that keeps unrelated mutations
-  //            (terminal output, file trees, menus) out of the scan entirely.
-  //   blocks — elements inside a root that get their own direction.
+  //   root    — a container whose contents may be flipped.
+  //   gate    — cheap ancestor/descendant test that keeps unrelated mutations
+  //             (terminal output, file trees, menus) out of the scan entirely.
+  //   blocks  — elements inside a root that get their own direction.
+  //   isolate — elements that only get a direction of their own, so they stop
+  //             taking part in the direction of the block around them.
   const SCOPES = [
     {
       // Chat message bodies inside the conversation timeline.
@@ -48,6 +53,27 @@
       root: '[data-chat-composer-top-drawer="true"]',
       gate: '[data-chat-composer-top-drawer="true"]',
       blocks: "p, button, span",
+    },
+    {
+      // A message waiting in the queue. It is a timeline row, but not a chat
+      // message body, so it needs its own root. Only the prompt text flips:
+      // the status row under it ("Queued" and its two buttons) holds no
+      // Persian and keeps the layout it has everywhere else.
+      root: "[data-queued-message-id]",
+      gate: "[data-timeline-root]",
+      blocks: ".whitespace-pre-wrap",
+    },
+    {
+      // The composer input. The editor marks every paragraph dir="auto", which
+      // HTML resolves from the first strong character anywhere inside the
+      // element — including the Latin label of an attachment or mention chip.
+      // A Persian message that started with an attachment was therefore laid
+      // out left to right. Giving a chip a direction of its own takes it out
+      // of that scan, because HTML skips descendants that carry one, so the
+      // typed text decides the direction again. The text itself is untouched.
+      root: '[data-lexical-editor="true"]',
+      gate: '[data-lexical-editor="true"]',
+      isolate: '[data-lexical-decorator="true"]',
     },
   ];
 
@@ -163,18 +189,33 @@ body, .font-sans {
     else el.removeAttribute(ALIGN_FLAG);
   }
 
+  /**
+   * dir="auto" on an element makes it pick its own direction from its own text
+   * and, per HTML, drops that text from the dir="auto" scan of every block
+   * above it. A direction the app set itself is left alone.
+   */
+  function isolateDirection(el) {
+    if (!el.hasAttribute("dir")) el.setAttribute("dir", "auto");
+  }
+
   function applyToRoot(root, scope) {
     if (root.closest(SKIP)) return;
-    const blocks = root.querySelectorAll(scope.blocks);
-    // User messages are plain text with no block children — flip the root itself.
-    const targets = blocks.length > 0 ? blocks : [root];
-    for (const el of targets) {
-      if (el !== root && el.closest(SKIP)) continue;
-      setDirection(el);
+    if (scope.blocks) {
+      const blocks = root.querySelectorAll(scope.blocks);
+      // User messages are plain text with no block children — flip the root itself.
+      const targets = blocks.length > 0 ? blocks : [root];
+      for (const el of targets) {
+        if (el !== root && el.closest(SKIP)) continue;
+        setDirection(el);
+      }
     }
-    if (!scope.align) return;
-    for (const el of root.querySelectorAll(scope.align)) {
-      if (!el.closest(SKIP)) setAlignment(el);
+    if (scope.align) {
+      for (const el of root.querySelectorAll(scope.align)) {
+        if (!el.closest(SKIP)) setAlignment(el);
+      }
+    }
+    if (scope.isolate) {
+      for (const el of root.querySelectorAll(scope.isolate)) isolateDirection(el);
     }
   }
 
