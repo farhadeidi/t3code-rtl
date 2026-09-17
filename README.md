@@ -135,4 +135,6 @@ The patch is idempotent: each application replaces the prior injected block. Cur
 
 ## License
 
-The code is [MIT licensed](LICENSE). The bundled Arad font is available under the [SIL Open Font License 1.1](fonts/OFL.txt).
+The code is [MIT licensed](LICENSE).
+
+The bundled font is [Arad](https://github.com/MohamadDarvishi/Arad) 2.4.0, the `AradNL` variable build, copied from upstream without changes and licensed under the [SIL Open Font License 1.1](fonts/OFL.txt). The patcher embeds it in the page it injects, and the same notice is repeated there.

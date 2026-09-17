@@ -120,6 +120,16 @@
     '"DM Sans Variable", "DM Sans", "AradNL", -apple-system, BlinkMacSystemFont, ' +
     '"Segoe UI", system-ui, sans-serif';
 
+  // The font below is embedded as a data URL by the patcher, so the notice the
+  // OFL asks to travel with every copy travels here:
+  //
+  //   Arad (AradNL variable), version 2.4.0
+  //   Copyright 2025 The Arad Project Authors
+  //   https://github.com/MohamadDarvishi/Arad
+  //   Licensed under the SIL Open Font License 1.1: https://scripts.sil.org/OFL
+  //
+  // The file is the upstream release, byte for byte, with no subsetting or
+  // renaming, so the reserved font name clause is not in play.
   const style = document.createElement("style");
   style.id = "t3code-rtl-patch-style";
   // Unlayered on purpose: upstream Tailwind utilities live in @layer utilities,
