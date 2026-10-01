@@ -27,7 +27,7 @@ T3 Code lays Persian and Arabic chat text out left to right, which leaves punctu
 - A table that holds Persian or Arabic text keeps its column order, but all of its cells are aligned to the right together, so one English cell does not leave the column ragged. Each cell still becomes RTL only on its own merits.
 - Every block without such text is left exactly as it was — same direction, same font, same styling. A card with an English header and Persian options keeps the header LTR.
 - Code blocks, inline code, diffs, terminal output, and keyboard shortcut badges are never flipped, even when they appear inside an RTL block.
-- The composer input keeps the direction T3 Code gives it, which follows the first letter you type. The one change there: an attachment or mention chip gets `dir="auto"`, so a chip named `image.png` no longer makes a Persian message left-to-right when the attachment comes first.
+- Each line of the composer input follows the first letter you type in it: a Persian or Arabic line reads right to left, an English line stays left to right. An attachment or mention chip never decides the direction, so a chip named `image.png` does not make a Persian message left-to-right when the attachment comes first.
 - The sidebar, menus, settings, and the rest of the interface are never touched.
 - Only the Arabic script is detected, which covers Persian, Arabic, Urdu, and Pashto. Hebrew and other right-to-left scripts are left alone.
 

@@ -11,9 +11,9 @@
  *   - Only chat message bodies, queued messages and the composer drawer that
  *     holds pending questions and approvals are scanned. The sidebar and the
  *     rest of the UI are never touched.
- *   - The composer input keeps the direction the editor gives it; the only
- *     change there is an explicit dir on attachment chips, so their Latin
- *     labels stop deciding the direction of a Persian message.
+ *   - Each composer paragraph takes the direction of its first strong
+ *     character, so a Persian message is typed right to left while an English
+ *     one stays left to right. Attachment chips never decide that direction.
  *   - Code blocks, inline code, diffs and terminals are excluded from both the
  *     detection and the flip, and stay LTR even inside an RTL paragraph.
  */
@@ -66,7 +66,10 @@
       blocks: ".whitespace-pre-wrap",
     },
     {
-      // The composer input. The editor marks every paragraph dir="auto", which
+      // The Lexical composer input of older T3 Code releases. Newer releases
+      // use a TipTap editor, which the stylesheet handles instead.
+      //
+      // The editor marks every paragraph dir="auto", which
       // HTML resolves from the first strong character anywhere inside the
       // element — including the Latin label of an attachment or mention chip.
       // A Persian message that started with an attachment was therefore laid
@@ -154,6 +157,15 @@ body, .font-sans {
 }
 [${FLAG}] {
   text-align: right;
+}
+/* The TipTap composer sets no direction at all, so every paragraph rendered
+   left to right. plaintext resolves each paragraph from its first strong
+   character, like dir="auto", without touching DOM that ProseMirror owns and
+   re-reads on mutation. Chips are inline-flex, so their Latin labels count
+   as neutral and never decide the direction. */
+.composer-tiptap p {
+  unicode-bidi: plaintext;
+  text-align: start;
 }
 /* Upstream aligns table cells left with a rule of the form
    ".chat-markdown th, .chat-markdown td", which outranks a bare attribute
