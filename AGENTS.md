@@ -22,6 +22,8 @@ Get explicit user approval immediately before any action that:
 - Creates, removes, or changes the LaunchAgent that controls
   `T3CODE_DISABLE_AUTO_UPDATE`.
 - Publishes to npm, pushes to a remote, or changes repository visibility.
+  Pushing a `v*` tag publishes to npm, so that push needs the same approval
+  as a publish.
 
 Describe the exact effect before requesting approval. Never treat an earlier
 approval as permission for a later execution-time mutation.
@@ -58,6 +60,23 @@ afterwards. Never leave test artifacts behind.
 Use a real macOS T3 Code installation for release validation when a change
 touches app patching, updates, or LaunchAgent behavior. Do not modify a user's
 installed app during routine automated checks.
+
+## Releasing
+
+Releases publish from GitHub Actions through npm trusted publishing
+(`.github/workflows/publish.yml`), so no npm login or token is involved. To
+release:
+
+```sh
+npm version patch -m "Release v%s"
+git push origin main --follow-tags
+```
+
+Run the verification checks above before tagging; CI stays deliberately light
+and only reruns `npm run check` and the fast smoke test. The tag push then
+publishes to npm and creates the GitHub release. A prerelease version such as
+`0.3.0-beta.1` is published under the `next` dist-tag and never replaces
+`latest`. Do not run `npm publish` locally.
 
 If these instructions conflict with the requested task, explain the conflict
 and get user sign-off before proceeding.

@@ -1,0 +1,46 @@
+# Publishes to npm when a version tag is pushed, through npm trusted
+# publishing (OIDC): no npm token is stored anywhere. The trusted publisher on
+# npmjs.com names this file, so renaming it breaks publishing.
+#
+# Kept deliberately small: the full checks run locally before tagging. This
+# only guards against a wrong tag or an obviously broken build.
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the GitHub release
+  id-token: write # npm trusted publishing and provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24 # bundles npm 11.5.1+, required for trusted publishing
+
+      - name: Check that the tag matches package.json
+        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
+
+      - run: npm ci
+      - run: npm run check
+      # Builds dist/ itself; `npm publish` builds again through prepack.
+      - run: npm run test:smoke
+
+      # A prerelease such as 0.3.0-beta.1 goes to `next`, so it never becomes
+      # what `npx t3code-rtl` installs.
+      - name: Publish to npm and create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            npm publish --tag next
+            gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag --prerelease
+          else
+            npm publish
+            gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
+          fi
