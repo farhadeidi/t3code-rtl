@@ -63,6 +63,18 @@ expect "$(grep -c 't3code-rtl:begin' "$APP/resources/app.asar.unpacked/$INDEX")"
 printf "y\n" | node "$CLI" unpatch >/dev/null
 expect "$(grep -c 't3code-rtl:begin' "$APP/resources/app.asar.unpacked/$INDEX" || true)" 0 "unpatched"
 
+# --- npm package layout (t3 0.1.0+: client next to the platform executable) ---
+step "npm platform package layout"
+APP="$TMP/npm/@t3code/t3-test"; FILE="$APP/client/index.html"
+mkdir -p "$(dirname "$FILE")"; printf '<html><body>\n  </body></html>\n' > "$FILE"
+printf '{"name":"@t3code/t3-test","version":"0.1.0"}\n' > "$APP/package.json"
+export T3CODE_APP_DIRS="$APP"
+printf "y\n" | node "$CLI" patch >/dev/null
+expect "$(grep -c 't3code-rtl:begin' "$FILE")" 1 "patched client/index.html"
+expect "$(node "$CLI" status | head -1 | grep -c 'patched  (0.1.0')" 1 "status reads the platform package version"
+printf "y\n" | node "$CLI" unpatch >/dev/null
+expect "$(grep -c 't3code-rtl:begin' "$FILE" || true)" 0 "unpatched"
+
 # --- update through a fake Homebrew (macOS only; the real brew is never called) ---
 if [ "$(uname)" = Darwin ]; then
   step "update via fake brew"
@@ -76,16 +88,16 @@ echo "$*" >> "$BREW_LOG"
 exit 0
 EOF
   chmod +x "$BIN/brew"
-  ALPHA="$TMP/apps/T3 Code (Alpha).app"; NIGHTLY="$TMP/apps/T3 Code (Nightly).app"
-  for APP in "$ALPHA" "$NIGHTLY"; do
+  BETA="$TMP/apps/T3 Code (Beta).app"; NIGHTLY="$TMP/apps/T3 Code (Nightly).app"
+  for APP in "$BETA" "$NIGHTLY"; do
     mkdir -p "$APP/resources/app.asar.unpacked/$(dirname "$INDEX")"
     printf '<html><body>\n  </body></html>\n' > "$APP/resources/app.asar.unpacked/$INDEX"
   done
-  export T3CODE_APP_DIRS="$ALPHA"$'\n'"$NIGHTLY"
+  export T3CODE_APP_DIRS="$BETA"$'\n'"$NIGHTLY"
   run_update() { rm -f "$BREW_LOG"; (printf "y\n" | PATH="$BIN:$PATH" node "$CLI" update 2>&1 || true); }
 
   OUT="$(FAKE_CASKS="t3-code t3-code@nightly" run_update)"
-  expect "$(grep -c '^upgrade' "$BREW_LOG")" 2 "upgrades alpha and nightly casks"
+  expect "$(grep -c '^upgrade' "$BREW_LOG")" 2 "upgrades beta and nightly casks"
   expect "$(grep -c 't3code-rtl:begin' "$NIGHTLY/resources/app.asar.unpacked/$INDEX")" 1 "nightly patched after update"
 
   OUT="$(FAKE_CASKS="t3-code" run_update)"
@@ -94,7 +106,7 @@ EOF
 
   OUT="$(FAKE_CASKS="t3-code t3-code@nightly" FAKE_FAIL="t3-code@nightly" run_update)"
   expect "$(grep -c 'could not upgrade t3-code@nightly' <<<"$OUT")" 1 "reports a failed cask upgrade"
-  expect "$(grep -c 'Patched T3 Code (Alpha).app' <<<"$OUT")" 1 "still patches after a failed upgrade"
+  expect "$(grep -c 'Patched T3 Code (Beta).app' <<<"$OUT")" 1 "still patches after a failed upgrade"
 
   OUT="$(FAKE_CASKS="" run_update)"
   expect "$(grep -c 'No T3 Code Homebrew cask' <<<"$OUT")" 1 "explains when no cask is installed"
@@ -108,7 +120,7 @@ if [ "${SMOKE_T3:-}" = "1" ]; then
   step "t3 npm package served over HTTP"
   PKG="$TMP/pkg"; mkdir -p "$PKG"; cd "$PKG"
   npm init -y >/dev/null; echo "installing t3 (this can take a few minutes)..."; npm install t3@latest --silent --no-audit --no-fund --prefer-offline
-  export T3CODE_APP_DIRS="$PKG/node_modules/t3"
+  export T3CODE_APP_DIRS="$PKG/node_modules/@t3code/t3-$(node -p 'process.platform + "-" + process.arch')"
   printf "y\n" | node "$CLI" patch >/dev/null
   node node_modules/t3/dist/bin.mjs serve --port "$PORT" --base-dir "$TMP/t3data" >"$TMP/server.log" 2>&1 &
   SERVER_PID=$!

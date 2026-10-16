@@ -57,10 +57,18 @@
       blocks: "p, button, span",
     },
     {
-      // A message waiting in the queue. It is a timeline row, but not a chat
-      // message body, so it needs its own root. Only the prompt text flips:
-      // the status row under it ("Queued" and its two buttons) holds no
-      // Persian and keeps the layout it has everywhere else.
+      // Messages waiting in the queue, listed in a banner above the composer.
+      // The banner has no marker of its own beyond its accessible name. Only
+      // the prompt text of each row flips; the drag handle and the edit and
+      // remove buttons keep their places.
+      root: '[data-slot="composer-banner"][aria-label*="queued message"]',
+      gate: '[data-slot="composer-banner"][aria-label*="queued message"]',
+      blocks: "li .truncate",
+    },
+    {
+      // A message waiting in the queue in older T3 Code releases, which showed
+      // it as a timeline row. Only the prompt text flips: the status row under
+      // it ("Queued" and its two buttons) holds no Persian.
       root: "[data-queued-message-id]",
       gate: "[data-timeline-root]",
       blocks: ".whitespace-pre-wrap",
@@ -115,13 +123,31 @@
   // single English cell does not leave the column ragged.
   const ALIGN_FLAG = "data-t3code-rtl-align";
 
-  // Persian font. AradNL has no Latin glyphs at all, so putting it after the
-  // app's DM Sans (whose @font-face is unicode-range-limited to Latin) makes the
-  // split automatic: Latin keeps DM Sans, Persian falls through to Arad.
+  // Persian font. AradNL has no Latin glyphs at all, so it goes into the app's
+  // --font-sans stack just before the system fonts: Latin keeps whatever comes
+  // first (the app default, or a font picked in T3 Code's typography
+  // settings), and Persian falls through to Arad before the system Arabic
+  // font can claim it. A Persian font the user picked comes first and wins.
   // Mono stays untouched, so code blocks are unaffected.
-  const SANS_STACK =
-    '"DM Sans Variable", "DM Sans", "AradNL", -apple-system, BlinkMacSystemFont, ' +
-    '"Segoe UI", system-ui, sans-serif';
+  const SYSTEM_FAMILY = /^(-apple-system|BlinkMacSystemFont|system-ui|ui-sans-serif|sans-serif)$/i;
+  const SANS_VAR = "--font-sans";
+
+  function withArad(stack) {
+    const families = stack.split(",").map((family) => family.trim()).filter(Boolean);
+    const at = families.findIndex((family) => SYSTEM_FAMILY.test(family));
+    families.splice(at < 0 ? families.length : at, 0, '"AradNL"');
+    return families.join(", ");
+  }
+
+  // The app keeps its default stack in a stylesheet and writes a custom font
+  // as an inline style on <html>, replacing or removing whatever is there. So
+  // the stack is read back after every change to that inline style, and an
+  // inline copy with Arad in it is written whenever Arad is missing.
+  function applyFont() {
+    const html = document.documentElement;
+    const stack = getComputedStyle(html).getPropertyValue(SANS_VAR).trim();
+    if (stack && !stack.includes("AradNL")) html.style.setProperty(SANS_VAR, withArad(stack));
+  }
 
   // The font below is embedded as a data URL by the patcher, so the notice the
   // OFL asks to travel with every copy travels here:
@@ -144,16 +170,6 @@
   font-weight: 100 1000;
   font-style: normal;
   font-display: swap;
-}
-:root, :host {
-  --font-sans: ${SANS_STACK};
-  --default-font-family: ${SANS_STACK};
-}
-/* body carries a LITERAL stack upstream, not var(--font-sans), so redefining
-   the variables alone changes nothing. Everything else inherits from body —
-   including form controls, which upstream gives font:inherit. */
-body, .font-sans {
-  font-family: ${SANS_STACK};
 }
 [${FLAG}] {
   text-align: right;
@@ -311,6 +327,11 @@ body, .font-sans {
   });
 
   function start() {
+    applyFont();
+    new MutationObserver(applyFont).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["style"],
+    });
     // Synchronous first pass so nothing is ever painted left-aligned first.
     for (const scope of SCOPES) {
       for (const root of document.querySelectorAll(scope.root)) {

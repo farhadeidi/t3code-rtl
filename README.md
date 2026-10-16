@@ -22,12 +22,13 @@ T3 Code lays Persian and Arabic chat text out left to right, which leaves punctu
 
 - A paragraph, list item, heading, or table cell inside a chat message gets `dir="rtl"` and the Arad font only if it contains at least one Persian or Arabic character.
 - The drawer above the composer — the question card, its options, approval requests — is treated the same way: a question, an option label, or an option description with Persian or Arabic text becomes RTL. An option row with RTL text also mirrors, so its shortcut number sits on the left.
-- A message waiting in the queue is treated the same way: its text becomes RTL, while the `Queued` row under it keeps the layout it has everywhere else.
+- A message waiting in the queue above the composer is treated the same way: its text becomes RTL, while the drag handle and the edit and remove buttons beside it keep their places.
 - The thread title in the chat header becomes RTL when it holds Persian or Arabic text, and the rename field follows whatever you type into it. The breadcrumb beside the title keeps its order.
 - A table that holds Persian or Arabic text keeps its column order, but all of its cells are aligned to the right together, so one English cell does not leave the column ragged. Each cell still becomes RTL only on its own merits.
 - Every block without such text is left exactly as it was — same direction, same font, same styling. A card with an English header and Persian options keeps the header LTR.
 - Code blocks, inline code, diffs, terminal output, and keyboard shortcut badges are never flipped, even when they appear inside an RTL block.
 - Each line of the composer input follows the first letter you type in it: a Persian or Arabic line reads right to left, an English line stays left to right. An attachment or mention chip never decides the direction, so a chip named `image.png` does not make a Persian message left-to-right when the attachment comes first.
+- Arad is added to T3 Code's interface font stack just before the system fonts, so it only draws Persian and Arabic letters. A font chosen in T3 Code's typography settings keeps priority: Latin text keeps it, and a Persian font chosen there is used instead of Arad.
 - The sidebar, menus, settings, and the rest of the interface are never touched.
 - Only the Arabic script is detected, which covers Persian, Arabic, Urdu, and Pashto. Hebrew and other right-to-left scripts are left alone.
 
@@ -42,7 +43,7 @@ Node.js 20 or later, plus one of these T3 Code installations:
 
 - **macOS desktop app:** any `T3 Code*.app` in `/Applications`. The managed update mode additionally requires the Homebrew cask `t3-code` or `t3-code@nightly`.
 - **Linux desktop app:** `/opt/t3code-bin` or `/opt/t3code-nightly-bin` (AUR packages).
-- **`t3` npm package** (`npm install -g t3`, the same server that `npx t3` runs): detected automatically through `npm root -g`.
+- **`t3` npm package** (`npm install -g t3`, the same server that `npx t3` runs): detected automatically through `npm root -g`. Since `t3` 0.1.0 the client ships in a per-platform package (`@t3code/t3-<platform>-<arch>`), which is the directory that gets patched.
 - **Windows desktop app:** `%LOCALAPPDATA%\Programs\T3 Code` (winget). Untested; report problems in the issue tracker.
 
 Other locations can be supplied with `T3CODE_APP_DIRS` (one app or package directory per line).
@@ -97,11 +98,12 @@ The `t3` npm package serves the same web client as the desktop app, so it is a s
 
 ```sh
 mkdir t3-sandbox && cd t3-sandbox && npm install t3@latest
-T3CODE_APP_DIRS="$PWD/node_modules/t3" npx t3code-rtl patch
-npx t3 start --port 4711 --base-dir "$PWD/data"
+export T3CODE_APP_DIRS="$PWD/node_modules/@t3code/t3-$(node -p 'process.platform + "-" + process.arch')"
+npx t3code-rtl patch
+npx t3 serve --port 4711 --base-dir "$PWD/data"
 ```
 
-Open the printed URL and send a Persian or Arabic message. `npx t3code-rtl unpatch` with the same `T3CODE_APP_DIRS` reverts it; delete the sandbox directory when done.
+Open the printed pairing URL and send a Persian or Arabic message. `npx t3code-rtl unpatch` with the same `T3CODE_APP_DIRS` reverts it; delete the sandbox directory when done.
 
 Contributors can run the automated version of this, which cleans up after itself: `npm run test:smoke` (fake bundles) or `SMOKE_T3=1 npm run test:smoke` (also the real `t3` package).
 

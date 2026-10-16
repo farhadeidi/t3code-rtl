@@ -25,10 +25,12 @@ const END = "<!-- t3code-rtl:end -->";
 const CLIENT_INDEX = "apps/server/dist/client/index.html";
 const AGENT_LABEL = "io.github.farhadeidi.t3code-rtl-disable-auto-update";
 const ENV_FLAG = "T3CODE_DISABLE_AUTO_UPDATE";
-// Homebrew casks that ship T3 Code, with the app bundle each one installs.
+// Homebrew casks that ship T3 Code, with the app bundles each one installs. The
+// stable app was renamed from Alpha to Beta; the in-app updater keeps the old
+// bundle name, so both still belong to the same cask.
 const BREW_CASKS = [
-  { cask: "t3-code", app: "T3 Code (Alpha).app" },
-  { cask: "t3-code@nightly", app: "T3 Code (Nightly).app" },
+  { cask: "t3-code", apps: ["T3 Code (Beta).app", "T3 Code (Alpha).app"] },
+  { cask: "t3-code@nightly", apps: ["T3 Code (Nightly).app"] },
 ];
 const isMac = process.platform === "darwin";
 const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
@@ -47,13 +49,17 @@ function globDir(pattern: string): string[] {
   }
 }
 
-/** Global npm install of the `t3` server package (`npm i -g t3`), if present. */
+/**
+ * Global npm install of the `t3` server package (`npm i -g t3`), if present. Since 0.1.0
+ * `t3` is a launcher and the client ships in a per-platform package next to the executable.
+ */
 function globalNpmPackage(): string | undefined {
   const result = spawnSync("npm", ["root", "-g"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   const root = result.stdout?.trim();
   if (!root) return undefined;
-  const dir = join(root, "t3");
-  return existsSync(join(dir, "dist", "client", "index.html")) ? dir : undefined;
+  const platformPackage = join("@t3code", `t3-${process.platform}-${process.arch}`);
+  const candidates = [join(root, "t3"), join(root, "t3", "node_modules", platformPackage), join(root, platformPackage)];
+  return candidates.find((dir) => npmIndex(dir));
 }
 
 function appDirs(): string[] {
@@ -101,10 +107,15 @@ type Layout = {
   html: string; // path of the index.html that is read/written
 };
 
+/** Client page of a `t3` npm package: dist/client before 0.1.0, client in the platform package since. */
+function npmIndex(dir: string): string | undefined {
+  return [join(dir, "dist", "client", "index.html"), join(dir, "client", "index.html")].find((path) => existsSync(path));
+}
+
 function findLayout(app: string): Layout | undefined {
-  // `t3` npm package (npx t3 / npm i -g t3): the server serves dist/client directly.
-  const npmIndex = join(app, "dist", "client", "index.html");
-  if (existsSync(npmIndex)) return { app, resources: app, kind: "npm", html: npmIndex };
+  // `t3` npm package (npx t3 / npm i -g t3): the server serves its client directory directly.
+  const html = npmIndex(app);
+  if (html) return { app, resources: app, kind: "npm", html };
   for (const middle of ["resources", "Contents/Resources"]) {
     const resources = join(app, middle);
     const unpacked = join(resources, "app.asar.unpacked", CLIENT_INDEX);
@@ -288,7 +299,7 @@ type Release = { name: string; latest: string; command: string; current: () => s
 
 /** Where the newest version of an installation is published, and how to install it. */
 function releaseSource(app: string): { url: string; command: string } | undefined {
-  const known = BREW_CASKS.find((x) => x.app === basename(app));
+  const known = BREW_CASKS.find((x) => x.apps.includes(basename(app)));
   if (known) return { url: `https://formulae.brew.sh/api/cask/${known.cask}.json`, command: "t3code-rtl update" };
   if (findLayout(app)?.kind === "npm") return { url: "https://registry.npmjs.org/t3/latest", command: "npm install -g t3@latest" };
   return undefined;
@@ -353,7 +364,7 @@ function brewCasks(): string[] | undefined {
 
 /** Why `t3code-rtl update` cannot update an installation and what to do instead; undefined when a cask covers it. */
 function manualUpdateHint(app: string, casks: string[]): string | undefined {
-  const known = BREW_CASKS.find((x) => x.app === basename(app));
+  const known = BREW_CASKS.find((x) => x.apps.includes(basename(app)));
   if (known && casks.includes(known.cask)) return undefined;
   if (known) return `was not installed with Homebrew. Reinstall it with: brew install --cask --force ${known.cask}`;
   if (!app.endsWith(".app")) return "is the t3 npm package. Update it with: npm install -g t3@latest";
