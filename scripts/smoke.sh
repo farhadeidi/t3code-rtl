@@ -94,7 +94,10 @@ EOF
     printf '<html><body>\n  </body></html>\n' > "$APP/resources/app.asar.unpacked/$INDEX"
   done
   export T3CODE_APP_DIRS="$BETA"$'\n'"$NIGHTLY"
-  run_update() { rm -f "$BREW_LOG"; (printf "y\n" | PATH="$BIN:$PATH" node "$CLI" update 2>&1 || true); }
+  run_update() { rm -f "$BREW_LOG"; (PATH="$BIN:$PATH" node "$CLI" update --yes </dev/null 2>&1 || true); }
+
+  OUT="$(rm -f "$BREW_LOG"; printf "n\n" | FAKE_CASKS="t3-code" PATH="$BIN:$PATH" node "$CLI" update 2>&1 || true)"
+  expect "$(grep -c '^upgrade' "$BREW_LOG")" 0 "update without --yes asks first"
 
   OUT="$(FAKE_CASKS="t3-code t3-code@nightly" run_update)"
   expect "$(grep -c '^upgrade' "$BREW_LOG")" 2 "upgrades beta and nightly casks"

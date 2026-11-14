@@ -50,6 +50,7 @@ npx t3code-rtl unpatch         # برداشتن وصله و تنظیمات
 npx t3code-rtl status          # وضعیت اپ‌های شناسایی‌شده و نسخه‌ها
 npx t3code-rtl doctor          # اطلاعات تشخیصی کامل
 npx t3code-rtl update          # آپدیت با Homebrew و اعمال دوباره‌ی وصله (macOS)
+npx t3code-rtl update --yes    # همان، بدون پرسیدن تأیید
 ```
 
 </div>

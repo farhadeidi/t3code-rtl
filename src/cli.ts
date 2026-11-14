@@ -422,6 +422,7 @@ function setMode(mode: UpdateMode) {
 // ---------- Commands ----------
 
 async function approve(message: string) {
+  if (process.argv.includes("--yes") || process.argv.includes("-y")) return true;
   const answer = await p.confirm({ message });
   if (p.isCancel(answer) || !answer) {
     p.cancel("No changes were made.");
@@ -596,7 +597,7 @@ async function interactive() {
   p.outro("Done.");
 }
 
-const USAGE = "Usage: t3code-rtl [setup|patch|unpatch|status|doctor|update|--version]";
+const USAGE = "Usage: t3code-rtl [setup|patch|unpatch|status|doctor|update|--version] [--yes]";
 
 async function main() {
   const command = process.argv[2];

@@ -75,7 +75,10 @@ npx t3code-rtl unpatch         # remove the patch, LaunchAgent, and settings
 npx t3code-rtl status          # show detected apps, versions, patch state, update mode, and available updates
 npx t3code-rtl doctor          # show detailed diagnostics
 npx t3code-rtl update          # Homebrew update + patch on macOS
+npx t3code-rtl update --yes    # same, without the confirmation prompt
 ```
+
+`--yes` (or `-y`) skips the confirmation prompt of `patch`, `unpatch`, `setup`, and `update`. `setup` still asks for the update strategy.
 
 To install a permanent command instead:
 
