@@ -43,12 +43,12 @@ Node.js 20 or later, plus one of these T3 Code installations:
 
 - **macOS desktop app:** any `T3 Code*.app` in `/Applications`. The managed update mode additionally requires the Homebrew cask `t3-code` or `t3-code@nightly`.
 - **Linux desktop app:** `/opt/t3code-bin` or `/opt/t3code-nightly-bin` (AUR packages).
-- **`t3` npm package** (`npm install -g t3`, the same server that `npx t3` runs): detected automatically through `npm root -g`. Since `t3` 0.1.0 the client ships in a per-platform package (`@t3code/t3-<platform>-<arch>`), which is the directory that gets patched.
+- **`t3` CLI** (`npx t3` or `npm install -g t3`): since `t3` 0.1.1 the npm package is a launcher that downloads T3 Code into `~/.t3/runtime/versions/<version>` (or `$T3CODE_HOME/runtime/versions`). Every downloaded version is detected and patched. Older `t3` releases installed with `npm install -g` are found through `npm root -g`.
 - **Windows desktop app:** `%LOCALAPPDATA%\Programs\T3 Code` (winget). Untested; report problems in the issue tracker.
 
 Other locations can be supplied with `T3CODE_APP_DIRS` (one app or package directory per line).
 
-`npx t3@latest` downloads a fresh copy into the npx cache on every run, so a patch applied there does not persist. Use `npm install -g t3` and run `t3` instead.
+The patch stays in place until `t3` downloads a newer version, which starts out unpatched. Run `npx t3code-rtl patch` again after that.
 
 ## Run
 
@@ -101,9 +101,11 @@ The `t3` npm package serves the same web client as the desktop app, so it is a s
 
 ```sh
 mkdir t3-sandbox && cd t3-sandbox && npm install t3@latest
-export T3CODE_APP_DIRS="$PWD/node_modules/@t3code/t3-$(node -p 'process.platform + "-" + process.arch')"
+export T3CODE_HOME="$PWD/home"     # runtime and data stay inside the sandbox
+npx t3 --version                   # downloads T3 Code into $T3CODE_HOME
+export T3CODE_APP_DIRS="$(echo "$T3CODE_HOME"/runtime/versions/*)"
 npx t3code-rtl patch
-npx t3 serve --port 4711 --base-dir "$PWD/data"
+npx t3 serve --port 4711
 ```
 
 Open the printed pairing URL and send a Persian or Arabic message. `npx t3code-rtl unpatch` with the same `T3CODE_APP_DIRS` reverts it; delete the sandbox directory when done.

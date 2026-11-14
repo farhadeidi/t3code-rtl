@@ -57,7 +57,15 @@
       blocks: "p, button, span",
     },
     {
-      // Messages waiting in the queue, listed in a banner above the composer.
+      // Messages waiting in the queue, listed as dashed bubbles below the
+      // timeline. Only the prompt text of each bubble flips; its buttons and
+      // timestamp keep their places.
+      root: '[data-thread-queue="true"]',
+      gate: '[data-thread-queue="true"]',
+      blocks: "li .whitespace-pre-wrap",
+    },
+    {
+      // The queue banner above the composer in older T3 Code releases.
       // The banner has no marker of its own beyond its accessible name. Only
       // the prompt text of each row flips; the drag handle and the edit and
       // remove buttons keep their places.

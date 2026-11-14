@@ -8,7 +8,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -62,6 +62,23 @@ function globalNpmPackage(): string | undefined {
   return candidates.find((dir) => npmIndex(dir));
 }
 
+/**
+ * Executables the `t3` launcher (npx t3 / npm i -g t3, since 0.1.1) downloads into
+ * $T3CODE_HOME/runtime/versions/<version>, each with its client directory beside it.
+ * Folders still being installed have no completion marker yet and are skipped.
+ */
+function runtimeVersions(): string[] {
+  // Resolved the way the launcher resolves it.
+  const raw = process.env.T3CODE_HOME?.trim();
+  const t3Home = raw ? resolve(raw.replace(/^~(?=$|[\\/])/, home)) : join(home, ".t3");
+  return globDir(join(t3Home, "runtime", "versions", "*")).filter((dir) => existsSync(join(dir, ".install-complete")));
+}
+
+/** Display name of an installation; runtime folders are named after their version only. */
+function appName(app: string): string {
+  return basename(dirname(app)) === "versions" && existsSync(join(app, ".install-complete")) ? "t3 CLI" : basename(app);
+}
+
 function appDirs(): string[] {
   const override = process.env.T3CODE_APP_DIRS?.split("\n").filter(Boolean);
   if (override?.length) return override;
@@ -73,6 +90,7 @@ function appDirs(): string[] {
   }
   const npmPackage = globalNpmPackage();
   if (npmPackage) dirs.push(npmPackage);
+  dirs.push(...runtimeVersions());
   return dirs;
 }
 
@@ -107,7 +125,7 @@ type Layout = {
   html: string; // path of the index.html that is read/written
 };
 
-/** Client page of a `t3` npm package: dist/client before 0.1.0, client in the platform package since. */
+/** Client page of a `t3` install: dist/client before 0.1.0, client beside the executable since. */
 function npmIndex(dir: string): string | undefined {
   return [join(dir, "dist", "client", "index.html"), join(dir, "client", "index.html")].find((path) => existsSync(path));
 }
@@ -251,9 +269,9 @@ function patch() {
     try {
       patchApp(layout, js);
       count++;
-      p.log.success(`Patched ${basename(app)}`);
+      p.log.success(`Patched ${appName(app)}`);
     } catch (e) {
-      p.log.error(`${basename(app)}: ${(e as Error).message}`);
+      p.log.error(`${appName(app)}: ${(e as Error).message}`);
     }
   }
   if (!count) throw new Error("No T3 Code installation was patched.");
@@ -269,7 +287,7 @@ function unpatch() {
     // override file is equivalent to the original page, so stripping is sufficient.
     writeFileSync(layout.html, stripBlock(readFileSync(layout.html, "utf8")));
     count++;
-    p.log.success(`Removed patch from ${basename(app)}`);
+    p.log.success(`Removed patch from ${appName(app)}`);
   }
   if (!count) p.log.info("No patched T3 Code installation was found.");
   return count;
@@ -284,6 +302,8 @@ function installedVersion(app: string): string | undefined {
   try {
     const pkg = join(app, "package.json");
     if (existsSync(pkg)) return JSON.parse(readFileSync(pkg, "utf8")).version;
+    const marker = join(app, ".install-complete");
+    if (existsSync(marker)) return readFileSync(marker, "utf8").trim();
     const plist = readFileSync(join(app, "Contents", "Info.plist"), "utf8");
     return plist.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/)?.[1];
   } catch {
@@ -292,7 +312,7 @@ function installedVersion(app: string): string | undefined {
 }
 
 function describeApps(apps: string[]): string {
-  return apps.map((app) => [basename(app), installedVersion(app)].filter(Boolean).join(" ")).join(", ");
+  return apps.map((app) => [appName(app), installedVersion(app)].filter(Boolean).join(" ")).join(", ");
 }
 
 type Release = { name: string; latest: string; command: string; current: () => string | undefined };
@@ -320,7 +340,7 @@ async function fetchReleases(apps: string[]): Promise<Release[]> {
     { name: "t3code-rtl", url: "https://registry.npmjs.org/t3code-rtl/latest", command: "npx t3code-rtl@latest", current: () => packageVersion },
     ...apps.flatMap((app) => {
       const source = releaseSource(app);
-      return source ? [{ name: basename(app), ...source, current: () => installedVersion(app) }] : [];
+      return source ? [{ name: appName(app), ...source, current: () => installedVersion(app) }] : [];
     }),
   ];
   const releases = await Promise.all(sources.map(async ({ url, ...rest }) => ({ ...rest, latest: await latestVersion(url) })));
@@ -377,7 +397,7 @@ function warnManualUpdates(apps: string[], casks: string[]): number {
   for (const app of apps) {
     const hint = manualUpdateHint(app, casks);
     if (!hint) continue;
-    p.log.warn(`${basename(app)} will not be updated by t3code-rtl update: it ${hint}, then run: t3code-rtl patch`);
+    p.log.warn(`${appName(app)} will not be updated by t3code-rtl update: it ${hint}, then run: t3code-rtl patch`);
     count++;
   }
   return count;
@@ -484,7 +504,7 @@ async function status() {
       const layout = findLayout(app);
       const state = !layout ? "unrecognized layout" : isPatched(layout) ? "patched" : "not patched";
       const version = installedVersion(app);
-      console.log(`${basename(app)}: ${state}  (${version ? `${version}, ` : ""}${app})`);
+      console.log(`${appName(app)}: ${state}  (${version ? `${version}, ` : ""}${app})`);
     }
   }
   console.log(`Update mode: ${readConfig().updateMode ?? "not configured"}`);

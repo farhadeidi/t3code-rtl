@@ -118,19 +118,24 @@ EOF
   expect "$(grep -c 'Homebrew is not installed' <<<"$OUT")" 1 "explains when Homebrew is missing"
 fi
 
-# --- real t3 npm package (opt-in: SMOKE_T3=1; downloads ~600 MB, takes minutes) ---
+# --- real t3 npm package (opt-in: SMOKE_T3=1; downloads ~150 MB, takes minutes) ---
 if [ "${SMOKE_T3:-}" = "1" ]; then
   step "t3 npm package served over HTTP"
   PKG="$TMP/pkg"; mkdir -p "$PKG"; cd "$PKG"
-  npm init -y >/dev/null; echo "installing t3 (this can take a few minutes)..."; npm install t3@latest --silent --no-audit --no-fund --prefer-offline
-  export T3CODE_APP_DIRS="$PKG/node_modules/@t3code/t3-$(node -p 'process.platform + "-" + process.arch')"
-  printf "y\n" | node "$CLI" patch >/dev/null
-  node node_modules/t3/dist/bin.mjs serve --port "$PORT" --base-dir "$TMP/t3data" >"$TMP/server.log" 2>&1 &
+  npm init -y >/dev/null; npm install t3@latest --silent --no-audit --no-fund --prefer-offline
+  # The package is a launcher: the first run downloads the runtime into the isolated $HOME/.t3.
+  echo "downloading the t3 runtime (this can take a few minutes)..."; node_modules/.bin/t3 --version >/dev/null
+  RUNTIME="$(echo "$HOME"/.t3/runtime/versions/*)"
+  # Read-only: with no override, status lists whatever it detects, including this runtime.
+  expect "$(T3CODE_APP_DIRS= node "$CLI" status | grep -c '^t3 CLI: not patched')" 1 "detects the t3 runtime"
+  export T3CODE_APP_DIRS="$RUNTIME"
+  node "$CLI" patch --yes >/dev/null
+  node_modules/.bin/t3 serve --port "$PORT" >"$TMP/server.log" 2>&1 &
   SERVER_PID=$!
   for _ in $(seq 1 30); do curl -sf -m 10 "http://127.0.0.1:$PORT/" >/dev/null 2>&1 && break; sleep 1; done
   expect "$(curl -sf -m 10 "http://127.0.0.1:$PORT/" | grep -c '__t3codeRtlPatch')" 2 "served page contains patch"
   kill "$SERVER_PID"; SERVER_PID=""
-  printf "y\n" | node "$CLI" unpatch >/dev/null
+  node "$CLI" unpatch --yes >/dev/null
   expect "$(node "$CLI" status | head -1 | grep -c 'not patched')" 1 "unpatched"
 else
   echo; echo "(skipped t3 npm package stage; run with SMOKE_T3=1 to include it)"
